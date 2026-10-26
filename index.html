@@ -33,7 +33,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font
 .wrap{max-width:620px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 40px;display:flex;flex-direction:column;gap:12px}
 header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 h1{font-family:var(--display);font-weight:400;font-size:1.6rem;margin:0;letter-spacing:.01em}
-.hdr-ctl{display:flex;gap:8px;align-items:center}
+.hdr-ctl{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.hdr-ctl .btn.small{white-space:nowrap;padding:6px 9px}
+@media (max-width:440px){.hdr-ctl label{display:none}}
 select,button{font:inherit}
 select{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:.85rem}
 .btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 14px;font-weight:600;font-size:.95rem;cursor:pointer;min-height:44px}
@@ -73,6 +75,15 @@ ol.log .n{font-family:var(--mono)}
 .wbar{height:10px;border-radius:999px;overflow:hidden;display:flex;background:#1b1918;border:1px solid var(--line)}
 .wbar i{display:block;height:100%;background:#f4ecd9;transition:width .5s ease}
 .spark{width:100%;height:28px;display:block}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile .k{font-size:.78rem;color:var(--muted)}.tile .v{font-family:var(--display);font-size:1.6rem;font-variant-numeric:tabular-nums}.tile .s{font-size:.78rem;color:var(--muted)}
+.gtable{width:100%;border-collapse:collapse;font-size:.84rem;font-variant-numeric:tabular-nums}
+.gtable th{text-align:left;font-weight:600;color:var(--muted);font-size:.74rem;padding:6px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.gtable td{padding:7px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.res{display:inline-block;min-width:22px;text-align:center;border-radius:6px;padding:1px 6px;font-weight:700;font-size:.74rem;color:#fff}
+.res.w{background:var(--best)}.res.l{background:var(--bad)}.res.o{background:var(--muted)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:var(--muted)}
 .review{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
 .rv-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .rv-head b{font-weight:600}
@@ -95,10 +106,12 @@ ol.log .n{font-family:var(--mono)}
     <div class="hdr-ctl">
       <label for="lvl" class="note">Opponent</label>
       <select id="lvl"><option value="beginner">1 · Beginner</option><option value="intermediate">2 · Intermediate</option><option value="advanced">3 · Advanced</option><option value="expert">4 · Expert</option><option value="worldclass">5 · World class</option></select>
+      <button class="btn small" id="statsBtn">Stats</button>
       <button class="btn small" id="resignBtn">Resign</button>
       <button class="btn small" id="newBtn">New game</button>
     </div>
   </header>
+  <div id="gameView" style="display:flex;flex-direction:column;gap:12px">
 
   <div class="win" id="win" aria-live="polite">
     <div class="win-row"><span>You <b id="wMe">50%</b></span><span class="note">Winning chances</span><span>Opponent <b id="wOpp">50%</b></span></div>
@@ -153,6 +166,12 @@ ol.log .n{font-family:var(--mono)}
     <details id="logBox"><summary>Move log</summary><ol class="log" id="log"></ol></details>
     <div class="note">You play ivory, moving from your 24-point toward your home board at the bottom right. Tap a checker, then tap where it goes; tapping a far point plays both dice with one checker. Home-screen app: works with no internet. Games are kept on this phone (last 60). Tap "Copy games for Claude" and paste them into a chat to get them analysed. <span id="engineNote">Loading GNU Backgammon…</span></div>
   </section>
+  </div>
+  <div id="dashView" hidden style="display:flex;flex-direction:column;gap:12px">
+    <div class="tiles" id="dTiles"></div>
+    <section class="card"><h2>Your PR over time</h2><div class="note">PR is the equity you lose per move, times 500. Lower is better. The line is your 5-game average.</div><svg id="dChart" viewBox="0 0 340 200" style="width:100%;height:auto;display:block" role="img" aria-label="PR per game"></svg><div class="legend" id="dLegend"></div></section>
+    <section class="card"><h2>Games</h2><div style="overflow-x:auto"><table class="gtable" id="dTable"></table></div><div class="note" id="dNote"></div></section>
+  </div>
 </div>
 
 <script>
@@ -1399,7 +1418,7 @@ function finishPlayer(){
   const wMine0=BG.winProb(chosen.pos);
   pushWin(wMine0);
   const recIdx=S.record.length;
-  const rec={who:'me',dice,pos:orig,steps,played:myNot,hinted,win:+wMine0.toFixed(3)};
+  const rec={who:'me',dice,pos:orig,steps,played:myNot,hinted,win:+wMine0.toFixed(3),forced:ranked.length<2};
   S.record.push(rec);
   const finalize=(g,loss,best,wMine,wBest,deep)=>{
     if(S.gameId!==gid)return;
@@ -1617,6 +1636,7 @@ function persist(){
     while(arr.length>60)arr.shift();
     localStorage.setItem('bgc-archive',JSON.stringify(arr));
   }catch(e){}
+  saveSummary(summarize(doc));
   getDb().then(db=>{ if(db) return db.doc('games/'+S.gameId).set(doc) }).catch(()=>{});
 }
 /* ---------- GitHub sync (home-screen app): finished games go to the private backgammon-games repo ---------- */
@@ -1651,6 +1671,77 @@ $('ghSave').onclick=()=>{const t=$('ghToken').value.trim();if(!t){syncNote('Past
 $('ghRemove').onclick=()=>{try{localStorage.removeItem('bgc-gh-token')}catch(e){}$('syncForm').hidden=true;syncNote()};
 window.addEventListener('online',()=>syncGames());
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')syncGames(true)});
+/* ---------- stats dashboard ---------- */
+const GNU_SINCE=1792995012000; // games started after GNU became the coach
+const LVL_NAME={beginner:'Beginner',intermediate:'Intermediate',advanced:'Advanced',expert:'Expert',worldclass:'World class',strong:'Expert',casual:'Intermediate'};
+function summarize(d){
+  const rec=d.record||[];const ts=+String(d.id).slice(1)||Date.parse(d.startedAt)||0;
+  const mine=rec.filter(r=>r.who==='me'&&r.grade&&!r.auto&&!r.forced&&r.loss!=null);
+  const opp=rec.find(r=>r.who==='opp'&&r.level);
+  const res=d.result||'';let outcome=null,pts=0;
+  if(/You win/.test(res)){outcome='W'}else if(/Opponent wins/.test(res)){outcome='L'}
+  if(outcome){pts=/backgammon/.test(res)?3:/gammon/.test(res)?2:1;if(outcome==='L')pts=-pts}
+  const loss=mine.reduce((a,r)=>a+r.loss,0);
+  return {id:d.id,ts,date:d.startedAt||new Date(ts).toISOString(),updatedAt:d.updatedAt||'',level:opp?opp.level:null,outcome,pts,resigned:/resigned/.test(res),
+    moves:mine.length,pr:mine.length?loss/mine.length*500:null,blunders:mine.filter(r=>r.grade==='Blunder').length,mistakes:mine.filter(r=>r.grade==='Mistake').length,
+    gnu:ts>=GNU_SINCE,deep:mine.some(r=>r.deep)};
+}
+function summaries(){try{return JSON.parse(localStorage.getItem('bgc-summ')||'{}')}catch(e){return {}}}
+function saveSummary(x){if(!x||!x.id)return;try{const m=summaries();m[x.id]=x;localStorage.setItem('bgc-summ',JSON.stringify(m))}catch(e){}}
+async function loadSummaries(){
+  const m=summaries();
+  for(const g of archive()){const x=summarize(g);if(!m[x.id]||m[x.id].updatedAt<=x.updatedAt)m[x.id]=x}
+  try{const db=await getDb();if(db){const snap=await db.collection('games').limit(500).get();for(const ds of snap.docs){const d=ds.data();if(!d)continue;const x=summarize(d);if(!m[x.id]||m[x.id].updatedAt<=x.updatedAt)m[x.id]=x}}}catch(e){}
+  try{if(ghToken()&&navigator.onLine){
+    const hdr={Authorization:'Bearer '+ghToken(),Accept:'application/vnd.github+json'};
+    const r=await fetch(`https://api.github.com/repos/${GH_REPO}/contents/games`,{headers:hdr});
+    if(r.ok){for(const f of await r.json()){const id=f.name.replace(/\.json$/,'');if(!/^g\d+$/.test(id)||m[id])continue;
+      const fr=await fetch(f.url,{headers:hdr});if(!fr.ok)continue;const j=await fr.json();
+      const d=JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,'')))));m[id]=summarize(d)}}
+  }}catch(e){}
+  try{localStorage.setItem('bgc-summ',JSON.stringify(m))}catch(e){}
+  return Object.values(m).filter(x=>x.moves>0||x.outcome).sort((a,b)=>a.ts-b.ts);
+}
+function tier(pr){return pr==null?'':pr<2.5?'World champion':pr<5?'World class':pr<7.5?'Expert':pr<12.5?'Advanced':pr<17.5?'Intermediate':pr<22.5?'Casual':pr<30?'Beginner':'Learning'}
+async function showDash(){
+  $('gameView').hidden=true;$('dashView').hidden=false;$('statsBtn').textContent='Game';
+  $('dTiles').innerHTML='<div class="tile"><span class="k">Loading your games…</span></div>';
+  const all=await loadSummaries();
+  const fin=all.filter(x=>x.outcome),w=fin.filter(x=>x.outcome==='W').length,l=fin.length-w;
+  const g=all.filter(x=>x.gnu&&x.pr!=null),last=g.slice(-10);
+  const avg=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:null;
+  const pr10=avg(last.map(x=>x.pr)),bl=avg(g.map(x=>x.blunders)),pts=fin.reduce((s,x)=>s+x.pts,0);
+  $('dTiles').innerHTML=`
+   <div class="tile"><span class="k">Games played</span><span class="v">${all.length}</span><span class="s">${fin.length} finished</span></div>
+   <div class="tile"><span class="k">Won · lost</span><span class="v">${w} · ${l}</span><span class="s">${fin.length?Math.round(100*w/fin.length)+'% wins · '+(pts>0?'+':'')+pts+' points':'no finished games'}</span></div>
+   <div class="tile"><span class="k">Your PR, last 10</span><span class="v">${pr10==null?'–':pr10.toFixed(1)}</span><span class="s">${tier(pr10)}${pr10!=null?' · lower is better':''}</span></div>
+   <div class="tile"><span class="k">Blunders per game</span><span class="v">${bl==null?'–':bl.toFixed(1)}</span><span class="s">GNU-graded games</span></div>`;
+  drawPR(g);
+  const fmt=d=>{const x=new Date(d);if(isNaN(x))return '';const p=n=>String(n).padStart(2,'0');return `${x.getDate()} ${x.toLocaleDateString(undefined,{month:'short'})} ${p(x.getHours())}:${p(x.getMinutes())}`};
+  const rows=all.slice().reverse().map(x=>`<tr><td>${fmt(x.date)}</td><td>${LVL_NAME[x.level]||'–'}</td>
+    <td>${x.outcome?`<span class="res ${x.outcome==='W'?'w':'l'}">${x.outcome}${Math.abs(x.pts)>1?' ×'+Math.abs(x.pts):''}</span>${x.resigned?' res.':''}`:'<span class="res o">–</span>'}</td>
+    <td>${x.pr==null?'–':x.pr.toFixed(1)}${x.gnu?'':'*'}</td><td>${x.blunders}</td></tr>`).join('');
+  $('dTable').innerHTML=`<thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>PR</th><th>Blunders</th></tr></thead><tbody>${rows||'<tr><td colspan="5">No games yet. Play one and it appears here.</td></tr>'}</tbody>`;
+  $('dNote').textContent='W/L ×2 = gammon, ×3 = backgammon, – = unfinished. '+(all.some(x=>!x.gnu)?'* Graded by the old built-in coach, before GNU; not comparable. ':'')+'PR here counts checker play only (no doubling cube), so it reads a bit lower than eXtreme Gammon\'s PR.';
+}
+function drawPR(g){
+  const svg=$('dChart');svg.innerHTML='';const W=340,H=200,L=30,R=8,T=10,B=24;
+  const mk=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);svg.appendChild(e);return e};
+  if(g.length<1){mk('text',{x:W/2,y:H/2,'text-anchor':'middle','font-size':12,style:'fill:var(--muted)'}).textContent='Play a game to see your PR here';$('dLegend').innerHTML='';return}
+  const max=Math.max(30,Math.ceil(Math.max(...g.map(x=>x.pr))/5)*5);
+  const X=i=>g.length===1?(L+W-R)/2:L+i*(W-L-R)/(g.length-1), Y=v=>T+(H-T-B)*(v/max);
+  for(const [v,name] of [[5,'World class'],[7.5,'Expert'],[12.5,'Advanced'],[17.5,'Intermediate'],[22.5,'Casual']]){if(v>max)continue;
+    mk('line',{x1:L,x2:W-R,y1:Y(v),y2:Y(v),style:'stroke:var(--line)','stroke-dasharray':'3 3'});
+    mk('text',{x:W-R,y:Y(v)-2,'text-anchor':'end','font-size':8,style:'fill:var(--muted)'}).textContent=name}
+  for(let v=0;v<=max;v+=10){mk('text',{x:L-4,y:Y(v)+3,'text-anchor':'end','font-size':9,style:'fill:var(--muted)'}).textContent=v}
+  mk('text',{x:L,y:H-6,'font-size':9,style:'fill:var(--muted)'}).textContent='older';mk('text',{x:W-R,y:H-6,'text-anchor':'end','font-size':9,style:'fill:var(--muted)'}).textContent='newest';
+  const roll=g.map((x,i)=>{const a=g.slice(Math.max(0,i-4),i+1);return a.reduce((s,y)=>s+y.pr,0)/a.length});
+  if(g.length>1)mk('polyline',{points:roll.map((v,i)=>`${X(i)},${Y(v)}`).join(' '),fill:'none',style:'stroke:var(--accent)','stroke-width':2.2,'stroke-linejoin':'round'});
+  g.forEach((x,i)=>mk('circle',{cx:X(i),cy:Y(Math.min(x.pr,max)),r:3.6,style:`fill:${x.outcome==='W'?'var(--best)':x.outcome==='L'?'var(--bad)':'var(--muted)'};stroke:var(--surface)`,'stroke-width':1}));
+  $('dLegend').innerHTML='<span><span class="sw" style="background:var(--best);height:8px;width:8px;border-radius:50%"></span> won</span><span><span class="sw" style="background:var(--bad);height:8px;width:8px;border-radius:50%"></span> lost</span><span><span class="sw" style="background:var(--muted);height:8px;width:8px;border-radius:50%"></span> unfinished</span><span><span class="sw" style="background:var(--accent)"></span> 5-game average</span>';
+}
+function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
+$('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
   let saved=null; try{saved=JSON.parse(localStorage.getItem('bgc-current')||'null')}catch(e){}
