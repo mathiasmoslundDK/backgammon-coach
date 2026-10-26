@@ -1491,7 +1491,7 @@ function finishPlayer(){
     const g=BG.grade(d.loss);
     if(stopsOn(g,lv)){
       if(!S.firstTry)S.firstTry={played:myNot,grade:g.label,tone:g.tone,loss:+d.loss.toFixed(4),hintedBefore:!!S.hinted};
-      S.stopD=d;S.phase='stopped';showStop(g,d,myNot);render();
+      S.stopD=d;S.stopG=g;S.phase='stopped';showStop(g,d,myNot);render();
     }else{S.phase='move';finishPlayerCore({d,first:S.firstTry})}
   }).catch(e=>{console.warn(e);S.phase='move';finishPlayerCore(S.firstTry?{first:S.firstTry}:null)});
 }
@@ -1506,11 +1506,7 @@ function showStop(g,d,myNot){
   $('stopRetry').onclick=()=>{S.stopShow=false;S.tries=(S.tries||0)+1;S.pos=S.startPos;S.hist=[];S.rem=BG.diceList(S.dice[0],S.dice[1]);S.sel=S.pos[25]>0?25:null;S.phase='move';
     $('coach').innerHTML=`<h2>Coach</h2><div>Try ${S.tries+1}: find a better move for ${S.dice.join('-')}. Hint is still available.</div>`;render()};
   $('stopHintBtn').onclick=()=>{S.hinted=true;$('stopHint').textContent=nudge(S.startPos,d.best,played)};
-  $('stopShowBtn').onclick=()=>{S.hinted=true;S.stopShow=true;
-    const esc=x=>String(x).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
-    const rs=played?BG.explain(S.startPos,played,d.best).slice(0,3):[];
-    $('stopHint').innerHTML=`GNU's best: <b>${esc(d.bestN)}</b> (gold arrows; yours are coral).`;
-    $('stopWhy').innerHTML=(rs.length?'<ul class="why">'+rs.map(r=>`<li>${esc(r.text)}</li>`).join('')+'</ul>':'')+aiButton({pos:S.startPos,dice:S.dice,played:BG.notation(S.hist.map(h=>h.step)),best:d.bestN,myEq:d.myEq,bestEq:d.bestEq,myWin:d.myWin,bestWin:d.bestWin,alts:d.plays.map(x=>({n:x.n,eq:x.eq,win:x.win}))});render()};
+  $('stopShowBtn').onclick=()=>{S.hinted=true;openLiveReview()};
   $('stopKeep').onclick=()=>{S.stopShow=false;S.phase='move';finishPlayerCore({d:S.stopD,first:S.firstTry})};
 }
 function finishPlayerCore(pre){
@@ -1669,6 +1665,17 @@ let coachSaved=null;
 function applySteps(p,steps){for(const s of steps){const r=BG.step(p,s.from,s.die);if(!r)break;p=r.q}return p}
 function openReview(idx){
   const t=S.record[idx]; if(!t||t.who!=='me'||!t.steps.length) return;
+  openReviewFor(t,S.record.slice(0,idx+1).filter(x=>x.who==='me').length,{idx});
+}
+// The move you just played while the game is stopped on a mistake, shown in the same review view.
+function openLiveReview(){
+  const d=S.stopD;if(!d)return;
+  const t={who:'me',pos:S.startPos,dice:S.dice,steps:S.hist.map(h=>h.step),played:BG.notation(S.hist.map(h=>h.step)),hinted:S.hinted,
+    deep:{loss:d.loss,bestN:d.bestN,plays:d.plays}};
+  openReviewFor(t,'now',{live:true});
+}
+function openReviewFor(t,turn,opt){
+  opt=opt||{};const idx=opt.idx;
   const ranked=BG.rankPlays(t.pos,t.dice[0],t.dice[1]).ranked;
   const k=BG.key(applySteps(t.pos,t.steps));
   const mine=ranked.find(r=>BG.key(r.pos)===k)||ranked[ranked.length-1];
@@ -1685,16 +1692,18 @@ function openReview(idx){
   let n=2; for(const r of ranked){ if(r===mine||r===best) continue; if(n>3) break; plays.push({id:'alt'+n,label:'#'+n,play:r,color:'alt'}); n++; }
   if(coachSaved==null) coachSaved=$('coach').innerHTML;
   const wMine=BG.winProb(mine.pos), wBest=BG.winProb(best.pos);
-  const turn=S.record.slice(0,idx+1).filter(x=>x.who==='me').length;
   const loss=t.deep?t.deep.loss:Math.max(0,best.score-mine.score);
-  R={idx,t,ranked,mine,best,plays,tab:(plays.find(p=>p.id==='compare')||plays[1]||plays[0]).id,turn,g:BG.grade(loss)};
+  R={idx,t,ranked,mine,best,plays,tab:(plays.find(p=>p.id==='compare')||plays[1]||plays[0]).id,turn,g:BG.grade(loss),live:!!opt.live};
+  $('rvBack').textContent=opt.live?'Back to my move':'Back to game';
   const dw=n=>t.deep&&t.deep.plays.find(x=>x.n===n);
   const wM=(dw(t.played)||{}).win??wMine, wB=(dw(BG.notation(best.steps))||{}).win??wBest;
   showCoach({g:R.g,loss,myNot:t.played,best,chosen:mine,ranked,orig:t.pos,dice:t.dice,hinted:t.hinted,wMine:wM,wBest:wB,deep:!!t.deep});
   render();
   document.querySelector('.board-wrap').scrollIntoView({behavior:'smooth',block:'start'});
 }
-function closeReview(){R=null; if(coachSaved!=null){$('coach').innerHTML=coachSaved;coachSaved=null} render()}
+function closeReview(){
+  if(R&&R.live){R=null;coachSaved=null;if(S.phase==='stopped'&&S.stopD)showStop(S.stopG,S.stopD,BG.notation(S.hist.map(h=>h.step)));render();return}
+  R=null; if(coachSaved!=null){$('coach').innerHTML=coachSaved;coachSaved=null} render()}
 // Faded checkers where yours stood before the move, rings on the checkers that moved in, and the opponent checker you hit.
 function drawGhosts(pre,post,color){
   const c=COL[color]||COL.mine;
@@ -1726,7 +1735,7 @@ function renderReview(){
     drawArrows(tab.play.steps,tab.color,0);
   }
   const g=R.g||BG.grade(Math.max(0,best.score-mine.score));
-  $('rvTitle').textContent=`Your move ${R.turn} · rolled ${t.dice.join('-')} · ${g.label}`;
+  $('rvTitle').textContent=`${R.live?'This move':'Your move '+R.turn} · rolled ${t.dice.join('-')} · ${g.label}`;
   const tabs=$('rvTabs'); tabs.innerHTML='';
   for(const p of plays){
     const b=document.createElement('button'); b.className='tab'; b.setAttribute('aria-pressed',String(p.id===tab.id));
@@ -1909,7 +1918,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.25';
+const APP_VERSION='v1.26';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
