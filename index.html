@@ -1384,11 +1384,14 @@ function sampler(){if(!samplerP)samplerP=(window.claude&&window.claude.use)?wind
 function posText(p){const mine=[],opp=[];for(let i=24;i>=1;i--){if(p[i]>0)mine.push(`${i}:${p[i]}`);if(p[i]<0)opp.push(`${i}:${-p[i]}`)}
   const f=BG.analyze(p);
   return `You (ivory) move from point 24 toward point 1 and bear off below 1. Your checkers by point: ${mine.join(', ')||'none'}${p[25]?`, bar:${p[25]}`:''}, borne off: ${p[0]}.\nOpponent checkers on the same numbering (they move from 1 toward 24): ${opp.join(', ')||'none'}${p[26]?`, opponent bar:${p[26]}`:''}, opponent borne off: ${p[27]}.\nPip counts: you ${f.myPip}, opponent ${f.oppPip}.`}
+function aiPrompt(ctx){
+  const alts=(ctx.alts||[]).slice(0,4).map(a=>`${a.n}: equity ${(+a.eq).toFixed(3)}, win ${Math.round(a.win*100)}%`).join('; ');
+  return `You are a backgammon coach explaining a GNU Backgammon analysis to an intermediate player (PR about 20). Do not recompute or second-guess GNU's numbers.\n\nPosition before the move:\n${posText(ctx.pos)}\nDice: ${ctx.dice.join('-')}.\n\nThe player played ${ctx.played} (equity ${ctx.myEq.toFixed(3)}, win ${Math.round(ctx.myWin*100)}%). GNU's best play is ${ctx.best} (equity ${ctx.bestEq.toFixed(3)}, win ${Math.round(ctx.bestWin*100)}%). ${alts?'Other plays GNU checked: '+alts+'.':''}\n\nIn plain English, at most 120 words, explain: 1) what the player's move gets wrong in this position, 2) what the best play achieves (hits, points made, blots, tempo, race, gammon chances), 3) the general principle to remember. Use short bullet points starting with "- ". No headings. Point numbers are from the player's view.`;
+}
 async function aiExplain(ctx,box,btn){
   const sample=await sampler();if(!sample){box.textContent='Explain with Claude only works inside the Claude app.';return}
   btn.disabled=true;box.textContent='Claude is thinking…';
-  const alts=(ctx.alts||[]).map(a=>`${a.n}: equity ${a.eq.toFixed(3)}, win ${Math.round(a.win*100)}%`).join('; ');
-  const prompt=`You are a backgammon coach explaining a GNU Backgammon analysis to an intermediate player (PR about 20). Do not recompute or second-guess GNU's numbers.\n\nPosition before the move:\n${posText(ctx.pos)}\nDice: ${ctx.dice.join('-')}.\n\nThe player played ${ctx.played} (equity ${ctx.myEq.toFixed(3)}, win ${Math.round(ctx.myWin*100)}%). GNU's best play is ${ctx.best} (equity ${ctx.bestEq.toFixed(3)}, win ${Math.round(ctx.bestWin*100)}%). ${alts?'Other plays GNU checked: '+alts+'.':''}\n\nIn plain English, at most 120 words, explain: 1) what the player's move gets wrong in this position, 2) what the best play achieves (hits, points made, blots, tempo, race, gammon chances), 3) the general principle to remember. Use short bullet points starting with "- ". No headings. Point numbers are from the player's view.`;
+  const prompt=aiPrompt(ctx);
   try{const r=await sample(prompt,{modelTier:'default',onText:({text})=>{box.innerHTML=fmtAI(text)}});box.innerHTML=fmtAI(r.text)}
   catch(e){box.textContent=e&&e.code==='not_granted'?'Claude was not allowed for this page.':e&&e.code==='rate_limited'?'Too many requests right now. Try again in a minute.':'Claude could not answer: '+(e&&e.message||e)}
   finally{btn.disabled=false}
@@ -1398,7 +1401,11 @@ function fmtAI(t){const esc=x=>String(x).replace(/[&<>]/g,m=>({'&':'&amp;','<':'
   const md=x=>esc(x).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
   return items.length?'<ul class="why">'+items.map(i=>`<li>${md(i)}</li>`).join('')+'</ul>':'<div>'+md(lines.join(' '))+'</div>'}
 function aiButton(ctx){const id='ai'+Math.random().toString(36).slice(2,8);
-  setTimeout(()=>{const b=document.getElementById(id);if(!b)return;sampler().then(sm=>{if(!sm){b.parentElement.hidden=true;return}
+  setTimeout(()=>{const b=document.getElementById(id);if(!b)return;sampler().then(sm=>{if(!sm){
+      // Outside the Claude app (home-screen app): open the question in Claude instead.
+      const a=document.createElement('a');a.className='btn small';a.target='_blank';a.rel='noopener';a.textContent='Ask Claude to explain ↗';
+      a.href='https://claude.ai/new?q='+encodeURIComponent(aiPrompt(ctx));b.replaceWith(a);
+      const o=document.getElementById(id+'o');if(o)o.textContent=navigator.onLine?'Opens Claude with this position filled in.':'Needs internet.';return}
     b.onclick=()=>aiExplain(ctx,document.getElementById(id+'o'),b)})},0);
   return `<div class="aibox"><button class="btn small" id="${id}">Explain with Claude</button><div id="${id}o" class="note"></div></div>`}
 function nudge(orig,best,played){
@@ -1881,7 +1888,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.23';
+const APP_VERSION='v1.24';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
