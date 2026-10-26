@@ -2,7 +2,8 @@
 <link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Backgammon"><meta name="theme-color" content="#3a2419">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"></head><body>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html,body{background:#ecefea}@media (prefers-color-scheme:dark){html,body{background:#121614}}</style></head><body>
 <title>Backgammon Coach</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,6 +33,7 @@
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
 .wrap{max-width:620px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 40px;display:flex;flex-direction:column;gap:12px}
 header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+h1 .ver{font-family:var(--mono);font-size:.62rem;color:var(--muted);letter-spacing:0;vertical-align:middle}
 h1{font-family:var(--display);font-weight:400;font-size:1.6rem;margin:0;letter-spacing:.01em}
 .hdr-ctl{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .hdr-ctl .btn.small{white-space:nowrap;padding:6px 9px}
@@ -102,7 +104,7 @@ ol.log .n{font-family:var(--mono)}
 
 <div class="wrap">
   <header>
-    <h1>Backgammon Coach</h1>
+    <h1>Backgammon Coach <span class="ver" id="ver"></span></h1>
     <div class="hdr-ctl">
       <label for="lvl" class="note">Opponent</label>
       <select id="lvl"><option value="beginner">1 · Beginner</option><option value="intermediate">2 · Intermediate</option><option value="advanced">3 · Advanced</option><option value="expert">4 · Expert</option><option value="worldclass">5 · World class</option></select>
@@ -1764,6 +1766,8 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
+const APP_VERSION='v1.16';
+$('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
   let saved=null; try{saved=JSON.parse(localStorage.getItem('bgc-current')||'null')}catch(e){}
