@@ -89,6 +89,7 @@ ol.log .n{font-family:var(--mono)}
 .ladder .row{display:flex;justify-content:space-between;gap:10px;padding:5px 8px;border-radius:8px}
 .ladder .row.you{background:var(--accent);color:var(--accent-ink);font-weight:700}
 .ladder .goal{font-size:.84rem;margin-top:8px}
+.aibox{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:var(--muted)}
 .stoprow{display:flex;align-items:center;gap:8px;justify-content:flex-end}
 .review{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
@@ -460,7 +461,7 @@ ol.log .n{font-family:var(--mono)}
     const dRisk = (C.comp.risk || 0) - (B.comp.risk || 0);
     if (dRisk < -0.015) {
       const exp = C.blots.filter(i => C.hitBy && C.hitBy[i]);
-      add(-dRisk, `Your play leaves ${exp.length > 1 ? 'blots on the ' + list(exp.map(pointName)) : 'a blot on the ' + pointName(exp[0])} that ${C.shots}/36 rolls hit. The best play ${B.shots ? 'leaves only ' + B.shots + '/36' : 'leaves no shots'}.`);
+      add(-dRisk, `Your play leaves ${exp.length > 1 ? 'blots on the ' + list(exp.map(pointName)) : 'a blot on the ' + pointName(exp[0])} that ${C.shots}/36 rolls hit. The best play ${B.shots === 0 ? 'leaves no shots' : B.shots < C.shots ? 'leaves only ' + B.shots + '/36' : 'leaves ' + B.shots + '/36 too, but a hit there costs you much less'}.`);
     } else if (dRisk > 0.03) {
       add(dRisk * 0.5, `You played safe (${C.shots}/36 shots vs ${B.shots}/36), but here the gain from the bolder play is worth the risk.`);
     }
@@ -1263,6 +1264,10 @@ function render(){
   svg.innerHTML='';
   drawBase();
   if(R){ renderReview(); renderUI([]); return; }
+  if(S.phase==='stopped'&&S.stopShow&&S.stopD){
+    drawCheckers(S.startPos,{});drawDice(S.dice,248,null);
+    drawArrows(S.hist.map(h=>h.step),'mine',-3);drawArrows(S.stopD.best.steps,'best',3);renderUI([]);return;
+  }
   const p=S.pos;
   const legal=curLegal();
   const srcSet=new Set(legal.map(s=>s.from));
@@ -1372,7 +1377,46 @@ $('rollBtn').onclick=async()=>{
 };
 $('undoBtn').onclick=()=>{if(!S.hist.length)return;const h=S.hist.pop();S.pos=h.pos;S.rem=h.rem;S.sel=null;if(S.pos[25]>0)S.sel=25;render()};
 $('doneBtn').onclick=()=>{if(S.phase==='move'&&S.hist.length===S.M)finishPlayer()};
-$('hintBtn').onclick=()=>{if(S.phase!=='move')return;S.hinted=true;const db=BG.deepBest&&BG.deepBest(deepJob);S.hintText=BG.notation((db||S.ranked[0]).steps)+(db?' (GNU, 2 rolls ahead)':'');if(S.hist.length){S.hintText+=' (from the start of this turn)'}render()};
+// A hint that points at the idea without giving the move away.
+/* ---------- explain with Claude (Claude app only; uses the viewer's Claude usage) ---------- */
+let samplerP=null;
+function sampler(){if(!samplerP)samplerP=(window.claude&&window.claude.use)?window.claude.use('sample').catch(()=>null):Promise.resolve(null);return samplerP}
+function posText(p){const mine=[],opp=[];for(let i=24;i>=1;i--){if(p[i]>0)mine.push(`${i}:${p[i]}`);if(p[i]<0)opp.push(`${i}:${-p[i]}`)}
+  const f=BG.analyze(p);
+  return `You (ivory) move from point 24 toward point 1 and bear off below 1. Your checkers by point: ${mine.join(', ')||'none'}${p[25]?`, bar:${p[25]}`:''}, borne off: ${p[0]}.\nOpponent checkers on the same numbering (they move from 1 toward 24): ${opp.join(', ')||'none'}${p[26]?`, opponent bar:${p[26]}`:''}, opponent borne off: ${p[27]}.\nPip counts: you ${f.myPip}, opponent ${f.oppPip}.`}
+async function aiExplain(ctx,box,btn){
+  const sample=await sampler();if(!sample){box.textContent='Explain with Claude only works inside the Claude app.';return}
+  btn.disabled=true;box.textContent='Claude is thinking…';
+  const alts=(ctx.alts||[]).map(a=>`${a.n}: equity ${a.eq.toFixed(3)}, win ${Math.round(a.win*100)}%`).join('; ');
+  const prompt=`You are a backgammon coach explaining a GNU Backgammon analysis to an intermediate player (PR about 20). Do not recompute or second-guess GNU's numbers.\n\nPosition before the move:\n${posText(ctx.pos)}\nDice: ${ctx.dice.join('-')}.\n\nThe player played ${ctx.played} (equity ${ctx.myEq.toFixed(3)}, win ${Math.round(ctx.myWin*100)}%). GNU's best play is ${ctx.best} (equity ${ctx.bestEq.toFixed(3)}, win ${Math.round(ctx.bestWin*100)}%). ${alts?'Other plays GNU checked: '+alts+'.':''}\n\nIn plain English, at most 120 words, explain: 1) what the player's move gets wrong in this position, 2) what the best play achieves (hits, points made, blots, tempo, race, gammon chances), 3) the general principle to remember. Use short bullet points starting with "- ". No headings. Point numbers are from the player's view.`;
+  try{const r=await sample(prompt,{modelTier:'default',onText:({text})=>{box.innerHTML=fmtAI(text)}});box.innerHTML=fmtAI(r.text)}
+  catch(e){box.textContent=e&&e.code==='not_granted'?'Claude was not allowed for this page.':e&&e.code==='rate_limited'?'Too many requests right now. Try again in a minute.':'Claude could not answer: '+(e&&e.message||e)}
+  finally{btn.disabled=false}
+}
+function fmtAI(t){const esc=x=>String(x).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+  const lines=t.split('\n').map(l=>l.trim()).filter(Boolean);const items=lines.filter(l=>/^[-•*]/.test(l)).map(l=>l.replace(/^[-•*]\s*/,''));
+  const md=x=>esc(x).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+  return items.length?'<ul class="why">'+items.map(i=>`<li>${md(i)}</li>`).join('')+'</ul>':'<div>'+md(lines.join(' '))+'</div>'}
+function aiButton(ctx){const id='ai'+Math.random().toString(36).slice(2,8);
+  setTimeout(()=>{const b=document.getElementById(id);if(!b)return;sampler().then(sm=>{if(!sm){b.parentElement.hidden=true;return}
+    b.onclick=()=>aiExplain(ctx,document.getElementById(id+'o'),b)})},0);
+  return `<div class="aibox"><button class="btn small" id="${id}">Explain with Claude</button><div id="${id}o" class="note"></div></div>`}
+function nudge(orig,best,played){
+  const B=best.f,O=BG.analyze(orig),P=played?played.f:null;
+  const hits=best.steps.filter(x=>x.hit).length;
+  if(hits>1)return 'Look for a double hit.';
+  if(hits&&!(played&&played.steps.some(x=>x.hit)))return 'There is a hit available. Look at the opponent\'s blots.';
+  const newPts=B.made.filter(i=>!O.made.includes(i)&&i>=2&&i<=8);
+  if(newPts.length&&!(P&&newPts.every(i=>P.made.includes(i))))return 'You can make a valuable point in or near your home board.';
+  if(best.steps.some(x=>x.from>=19||x.from===25)&&!(played&&played.steps.some(x=>x.from>=19||x.from===25)))return 'Think about your back checkers.';
+  if(P&&B.contact&&B.shots+6<P.shots)return `There is a safer play: yours leaves ${P.shots}/36 shots.`;
+  if(!B.contact)return 'It\'s a race: avoid wasting pips and fill gaps in your home board.';
+  return 'Think about which play keeps the most flexibility for next turn.';
+}
+$('hintBtn').onclick=()=>{if(S.phase!=='move')return;S.hinted=true;const db=(BG.deepBest&&BG.deepBest(deepJob))||S.ranked[0];
+  if(!S.hintStep){S.hintStep=1;S.hintText=nudge(S.startPos,db,null)+' Tap Hint again to see the move.'}
+  else{S.hintText=BG.notation(db.steps)+(BG.deepBest&&BG.deepBest(deepJob)?' (GNU, 2 rolls ahead)':'')+(S.hist.length?' (from the start of this turn)':'')}
+  render()};
 $('newBtn').onclick=()=>newGame();
 $('stopSel').value=stopLevel();
 $('stopSel').onchange=e=>{try{localStorage.setItem('bgc-stop',e.target.value)}catch(_){}};
@@ -1406,7 +1450,7 @@ function openingRoll(){
 let deepJob=null;
 function playerRoll(a,b){
   S.turnNo++;
-  S.firstTry=null;S.stopD=null;S.tries=0;
+  S.firstTry=null;S.stopD=null;S.tries=0;S.hintStep=0;S.stopShow=false;
   S.dice=[a,b]; S.rem=BG.diceList(a,b); S.hist=[]; S.startPos=S.pos; S.sel=null; S.hinted=false; S.hintText='';
   const r=BG.rankPlays(S.pos,a,b); S.ranked=r.ranked; S.M=r.max;
   if(deepJob)deepJob.cancelled=true;
@@ -1449,11 +1493,18 @@ function showStop(g,d,myNot){
    <div class="verdict"><span class="chip ${g.tone}">${g.label}</span><span class="loss">loss ${d.loss.toFixed(3)}</span></div>
    <div>Stopped before the opponent moves. <b>${myNot}</b> wins ${Math.round(d.myWin*100)}%, and the best play wins ${Math.round(d.bestWin*100)}%. Can you find a better move?</div>
    <div class="note" id="stopHint"></div>
-   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="stopRetry">Try again</button><button class="btn" id="stopHintBtn">Show hint</button><button class="btn" id="stopKeep">Keep my move</button></div>`;
-  $('stopRetry').onclick=()=>{S.tries=(S.tries||0)+1;S.pos=S.startPos;S.hist=[];S.rem=BG.diceList(S.dice[0],S.dice[1]);S.sel=S.pos[25]>0?25:null;S.phase='move';
+   <div class="why" id="stopWhy"></div>
+   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="stopRetry">Try again</button><button class="btn" id="stopHintBtn">Hint</button><button class="btn" id="stopShowBtn">Show best move</button><button class="btn" id="stopKeep">Keep my move</button></div>`;
+  const played=S.ranked.find(r=>BG.key(r.pos)===BG.key(S.pos));
+  $('stopRetry').onclick=()=>{S.stopShow=false;S.tries=(S.tries||0)+1;S.pos=S.startPos;S.hist=[];S.rem=BG.diceList(S.dice[0],S.dice[1]);S.sel=S.pos[25]>0?25:null;S.phase='move';
     $('coach').innerHTML=`<h2>Coach</h2><div>Try ${S.tries+1}: find a better move for ${S.dice.join('-')}. Hint is still available.</div>`;render()};
-  $('stopHintBtn').onclick=()=>{S.hinted=true;$('stopHint').textContent='GNU\'s best: '+d.bestN+'. Tap Try again and play it, or find it yourself.'};
-  $('stopKeep').onclick=()=>{S.phase='move';finishPlayerCore({d:S.stopD,first:S.firstTry})};
+  $('stopHintBtn').onclick=()=>{S.hinted=true;$('stopHint').textContent=nudge(S.startPos,d.best,played)};
+  $('stopShowBtn').onclick=()=>{S.hinted=true;S.stopShow=true;
+    const esc=x=>String(x).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+    const rs=played?BG.explain(S.startPos,played,d.best).slice(0,3):[];
+    $('stopHint').innerHTML=`GNU's best: <b>${esc(d.bestN)}</b> (gold arrows; yours are coral).`;
+    $('stopWhy').innerHTML=(rs.length?'<ul class="why">'+rs.map(r=>`<li>${esc(r.text)}</li>`).join('')+'</ul>':'')+aiButton({pos:S.startPos,dice:S.dice,played:BG.notation(S.hist.map(h=>h.step)),best:d.bestN,myEq:d.myEq,bestEq:d.bestEq,myWin:d.myWin,bestWin:d.bestWin,alts:d.plays.map(x=>({n:x.n,eq:x.eq,win:x.win}))});render()};
+  $('stopKeep').onclick=()=>{S.stopShow=false;S.phase='move';finishPlayerCore({d:S.stopD,first:S.firstTry})};
 }
 function finishPlayerCore(pre){
   const k=BG.key(S.pos);
@@ -1483,7 +1534,7 @@ function finishPlayerCore(pre){
     const li=S.log.findIndex(x=>x.includes(`data-rec="${recIdx}"`));
     if(li>=0)S.log[li]=entry; else S.log.unshift(entry);
     persist();
-    if(!R)showCoach({g:gF,loss:lossF,myNot,best,chosen,ranked,orig,dice,hinted,rec:recIdx,wMine,wBest,deep:!!deep,first,assisted});
+    if(!R)showCoach({g:gF,loss:lossF,myNot,best,chosen,ranked,orig,dice,hinted,rec:recIdx,wMine,wBest,deep:!!deep,first,assisted,dq:deep?{my:deep.myEq,best:deep.bestEq,plays:deep.plays}:null});
     render();
   };
   S.log.unshift(`<span data-rec-wait="${recIdx}" data-rec="${recIdx}"><span class="n">${dice.join('-')}</span> You: <span class="n">${myNot}</span> · checking…</span>`);
@@ -1523,6 +1574,7 @@ function showCoach(c){
    ${c.deep?'<div class="note">Checked by GNU 2 rolls ahead</div>':''}
    ${c.wMine!=null?`<div class="note">Winning chances after your move <b>${Math.round(c.wMine*100)}%</b>${c.g.tone!=='best'&&Math.round(c.wBest*100)!==Math.round(c.wMine*100)?` · after the best play <b>${Math.round(c.wBest*100)}%</b> (you gave up ${Math.round((c.wBest-c.wMine)*100)} points)`:''}</div>`:''}
    ${why}
+   ${c.g.tone!=='best'&&c.best&&c.chosen?aiButton({pos:c.orig,dice:c.dice,played:c.myNot,best:BG.notation(c.best.steps),myEq:c.dq?c.dq.my:c.chosen.score,bestEq:c.dq?c.dq.best:c.best.score,myWin:c.wMine??BG.winProb(c.chosen.pos),bestWin:c.wBest??BG.winProb(c.best.pos),alts:c.dq?c.dq.plays:(c.ranked||[]).slice(0,4).map(r=>({n:BG.notation(r.steps),eq:r.score,win:r.win??BG.winProb(r.pos)}))}):''}
    <details><summary class="note">Top plays for this roll</summary><div class="alts">${alts}</div></details>`;
 }
 // Auto-finish only once the losing side has borne off a checker, so a gammon can no longer happen.
@@ -1829,7 +1881,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.20';
+const APP_VERSION='v1.22';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
