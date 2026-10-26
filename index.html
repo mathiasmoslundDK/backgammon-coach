@@ -141,6 +141,14 @@ ol.log .n{font-family:var(--mono)}
     <div id="exportBox" hidden style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <button class="btn small" id="copyGames">Copy games for Claude</button><span class="note" id="copyNote"></span>
     </div>
+    <div id="syncBox" hidden style="display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn small" id="syncSetup">GitHub sync</button><span class="note" id="syncNote"></span></div>
+      <div id="syncForm" hidden style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <label for="ghToken" class="note">Fine-grained token for backgammon-games</label>
+        <input id="ghToken" type="password" autocomplete="off" placeholder="github_pat_…" style="flex:1;min-width:0;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)">
+        <button class="btn small primary" id="ghSave">Save</button><button class="btn small" id="ghRemove">Remove</button>
+      </div>
+    </div>
     <textarea id="copyArea" hidden readonly style="width:100%;height:90px;font-family:var(--mono);font-size:.7rem;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px"></textarea>
     <details id="logBox"><summary>Move log</summary><ol class="log" id="log"></ol></details>
     <div class="note">You play ivory, moving from your 24-point toward your home board at the bottom right. Tap a checker, then tap where it goes; tapping a far point plays both dice with one checker. Home-screen app: works with no internet. Games are kept on this phone (last 60). Tap "Copy games for Claude" and paste them into a chat to get them analysed. <span id="engineNote">Loading GNU Backgammon…</span></div>
@@ -1342,7 +1350,7 @@ $('resignNo').onclick=()=>{$('resignBox').hidden=true};
 $('resignYes').onclick=()=>{if(!(S.phase==='roll'||S.phase==='move'))return;
   if(S.phase==='move'){while(S.hist.length){const h=S.hist.pop();S.pos=h.pos;S.rem=h.rem}}
   S.over=`You resigned. Opponent wins ${RES[S.resignLv||1]}.`;S.log.unshift(`<b>${S.over}</b>`);
-  $('resignBox').hidden=true;pushWin(0);S.phase='over';S.sel=null;render();persist()};
+  $('resignBox').hidden=true;pushWin(0);S.phase='over';S.sel=null;render();persist();setTimeout(()=>syncGames(),500)};
 // Opponent levels follow GNU Backgammon's own presets: noise added to its evaluations, or a deeper search.
 const LEVELS={beginner:{noise:0.06},intermediate:{noise:0.04},advanced:{noise:0.015},expert:{noise:0},worldclass:{noise:0,deep:true}};
 let level='expert';
@@ -1517,7 +1525,7 @@ function endGame(won){
   else { if(p[0]===0){ kind='gammon'; let bg=p[25]>0; for(let i=19;i<=24;i++) if(p[i]>0) bg=true; if(bg)kind='backgammon'; } }
   S.over=won?`You win a ${kind}!`:`Opponent wins a ${kind}.`;
   S.log.unshift(`<b>${S.over}</b>`);
-  pushWin(won?1:0); S.phase='over'; render(); persist();
+  pushWin(won?1:0); S.phase='over'; render(); persist(); setTimeout(()=>syncGames&&syncGames(),500);
 }
 function newGame(){if(deepJob)deepJob.cancelled=true;S=freshState();$('coach').innerHTML='<h2>Coach</h2><div class="empty">After each of your moves, the coach grades it against every legal play for that roll and explains what the best play does better.</div>';render()}
 
@@ -1605,14 +1613,46 @@ function persist(){
   try{
     const arr=JSON.parse(localStorage.getItem('bgc-archive')||'[]');
     const j=arr.findIndex(g=>g.id===doc.id); const slim={...doc}; delete slim.log;
-    if(j>=0){slim.copied=arr[j].copied&&arr[j].updatedAt===slim.updatedAt;arr[j]=slim}else arr.push(slim);
+    if(j>=0){slim.copied=arr[j].copied&&arr[j].updatedAt===slim.updatedAt;slim.sha=arr[j].sha;slim.synced=false;arr[j]=slim}else{slim.synced=false;arr.push(slim)}
     while(arr.length>60)arr.shift();
     localStorage.setItem('bgc-archive',JSON.stringify(arr));
   }catch(e){}
   getDb().then(db=>{ if(db) return db.doc('games/'+S.gameId).set(doc) }).catch(()=>{});
 }
+/* ---------- GitHub sync (home-screen app): finished games go to the private backgammon-games repo ---------- */
+const GH_REPO='mathiasmoslundDK/backgammon-games';
+const ghToken=()=>{try{return localStorage.getItem('bgc-gh-token')||''}catch(e){return ''}};
+let syncing=false;
+function syncNote(t){const n=$('syncNote');if(!n)return;if(t){n.textContent=t;return}
+  const pend=archive().filter(g=>!g.synced).length;n.textContent=ghToken()?(pend?`${pend} game${pend>1?'s':''} waiting to upload`:'All games uploaded'):'Off: games stay on this phone'}
+const b64=str=>btoa(unescape(encodeURIComponent(str)));
+async function ghPut(g){
+  const url=`https://api.github.com/repos/${GH_REPO}/contents/games/${g.id}.json`;
+  const hdr={Authorization:'Bearer '+ghToken(),Accept:'application/vnd.github+json','Content-Type':'application/json'};
+  const body=o=>JSON.stringify({message:`Game ${g.id}${g.result?': '+g.result:''}`,content:b64(JSON.stringify(o,null,1)),...(g.sha?{sha:g.sha}:{})});
+  const clean={...g};delete clean.sha;delete clean.synced;delete clean.copied;
+  let r=await fetch(url,{method:'PUT',headers:hdr,body:body(clean)});
+  if(r.status===409||r.status===422){const cur=await fetch(url,{headers:hdr});if(cur.ok){g.sha=(await cur.json()).sha;r=await fetch(url,{method:'PUT',headers:hdr,body:body(clean)})}}
+  if(!r.ok)throw new Error('GitHub said '+r.status);
+  g.sha=(await r.json()).content.sha;
+}
+async function syncGames(force){
+  if(syncing||!ghToken()||!navigator.onLine)return syncNote();
+  const arr=archive();const todo=arr.filter(g=>!g.synced&&(g.result||force));
+  if(!todo.length)return syncNote();
+  syncing=true;syncNote('Uploading…');
+  try{for(const g of todo){await ghPut(g);g.synced=true;try{localStorage.setItem('bgc-archive',JSON.stringify(arr))}catch(e){}}syncNote()}
+  catch(e){syncNote(/401|403/.test(e.message)?'Token rejected: check it has Contents read and write on backgammon-games':'Upload failed, will retry: '+e.message)}
+  finally{syncing=false}
+}
+$('syncSetup').onclick=()=>{$('syncForm').hidden=!$('syncForm').hidden};
+$('ghSave').onclick=()=>{const t=$('ghToken').value.trim();if(!t){syncNote('Paste a token first');return}
+  try{localStorage.setItem('bgc-gh-token',t)}catch(e){}$('ghToken').value='';$('syncForm').hidden=true;syncGames(true)};
+$('ghRemove').onclick=()=>{try{localStorage.removeItem('bgc-gh-token')}catch(e){}$('syncForm').hidden=true;syncNote()};
+window.addEventListener('online',()=>syncGames());
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')syncGames(true)});
 function start(data){
-  getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; updateCopyNote(); } });
+  getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
   let saved=null; try{saved=JSON.parse(localStorage.getItem('bgc-current')||'null')}catch(e){}
   const src=(data&&data.S&&data.S.pos)?data.S:(saved&&saved.pos?saved:null);
   if(src){S=src;if(S.phase==='ai'){S.phase='roll'}
