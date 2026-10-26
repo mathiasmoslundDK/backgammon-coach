@@ -1548,7 +1548,7 @@ function endGame(won){
   S.log.unshift(`<b>${S.over}</b>`);
   pushWin(won?1:0); S.phase='over'; render(); persist(); setTimeout(()=>syncGames&&syncGames(),500);
 }
-function newGame(){if(deepJob)deepJob.cancelled=true;S=freshState();$('coach').innerHTML='<h2>Coach</h2><div class="empty">After each of your moves, the coach grades it against every legal play for that roll and explains what the best play does better.</div>';render()}
+function newGame(){if(deepJob)deepJob.cancelled=true;if(typeof hideDash==='function')hideDash();if(R)closeReview();S=freshState();$('coach').innerHTML='<h2>Coach</h2><div class="empty">After each of your moves, the coach grades it against every legal play for that roll and explains what the best play does better.</div>';render()}
 
 /* ---------- review mode ---------- */
 let coachSaved=null;
@@ -1766,7 +1766,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.16';
+const APP_VERSION='v1.17';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
