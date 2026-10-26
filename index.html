@@ -80,11 +80,15 @@ ol.log .n{font-family:var(--mono)}
 .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
 .tile .k{font-size:.78rem;color:var(--muted)}.tile .v{font-family:var(--display);font-size:1.6rem;font-variant-numeric:tabular-nums}.tile .s{font-size:.78rem;color:var(--muted)}
-.gtable{width:100%;border-collapse:collapse;font-size:.84rem;font-variant-numeric:tabular-nums}
-.gtable th{text-align:left;font-weight:600;color:var(--muted);font-size:.74rem;padding:6px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
-.gtable td{padding:7px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.gtable{width:100%;border-collapse:collapse;font-size:.8rem;font-variant-numeric:tabular-nums}
+.gtable th{text-align:left;font-weight:600;color:var(--muted);font-size:.72rem;padding:6px 4px;border-bottom:1px solid var(--line);white-space:nowrap}
+.gtable td{padding:7px 4px;border-bottom:1px solid var(--line);white-space:nowrap}
 .res{display:inline-block;min-width:22px;text-align:center;border-radius:6px;padding:1px 6px;font-weight:700;font-size:.74rem;color:#fff}
 .res.w{background:var(--best)}.res.l{background:var(--bad)}.res.o{background:var(--muted)}
+.ladder{display:flex;flex-direction:column;gap:2px;font-size:.86rem;font-variant-numeric:tabular-nums}
+.ladder .row{display:flex;justify-content:space-between;gap:10px;padding:5px 8px;border-radius:8px}
+.ladder .row.you{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.ladder .goal{font-size:.84rem;margin-top:8px}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:var(--muted)}
 .stoprow{display:flex;align-items:center;gap:8px;justify-content:flex-end}
 .review{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
@@ -175,6 +179,7 @@ ol.log .n{font-family:var(--mono)}
   </div>
   <div id="dashView" hidden style="display:flex;flex-direction:column;gap:12px">
     <div class="tiles" id="dTiles"></div>
+    <section class="card"><h2>Levels</h2><div id="dLadder"></div></section>
     <section class="card"><h2>Your PR over time</h2><div class="note">PR is the equity you lose per move, times 500. Lower is better. The line is your 5-game average.</div><svg id="dChart" viewBox="0 0 340 200" style="width:100%;height:auto;display:block" role="img" aria-label="PR per game"></svg><div class="legend" id="dLegend"></div></section>
     <section class="card"><h2>Games</h2><div style="overflow-x:auto"><table class="gtable" id="dTable"></table></div><div class="note" id="dNote"></div></section>
   </div>
@@ -1434,7 +1439,7 @@ function finishPlayer(){
     if(!d){S.phase='move';return finishPlayerCore(S.firstTry?{first:S.firstTry}:null)}
     const g=BG.grade(d.loss);
     if(stopsOn(g,lv)){
-      if(!S.firstTry)S.firstTry={played:myNot,grade:g.label,tone:g.tone,loss:+d.loss.toFixed(4)};
+      if(!S.firstTry)S.firstTry={played:myNot,grade:g.label,tone:g.tone,loss:+d.loss.toFixed(4),hintedBefore:!!S.hinted};
       S.stopD=d;S.phase='stopped';showStop(g,d,myNot);render();
     }else{S.phase='move';finishPlayerCore({d,first:S.firstTry})}
   }).catch(e=>{console.warn(e);S.phase='move';finishPlayerCore(S.firstTry?{first:S.firstTry}:null)});
@@ -1462,11 +1467,15 @@ function finishPlayerCore(pre){
   const rec={who:'me',dice,pos:orig,steps,played:myNot,hinted,win:+wMine0.toFixed(3),forced:ranked.length<2};
   S.record.push(rec);
   const first=pre&&pre.first&&pre.first.played!==myNot?pre.first:null;
+  // A move counts toward your accuracy only if no hint was shown before you first submitted it.
+  const assisted=S.firstTry?!!S.firstTry.hintedBefore:!!S.hinted;
+  const hintAfterStop=!!S.firstTry&&!!S.hinted&&!S.firstTry.hintedBefore;
   const finalize=(g,loss,best,wMine,wBest,deep)=>{
     if(S.gameId!==gid)return;
     const gF=g,lossF=loss;
     if(first){g={label:first.grade,tone:first.tone};loss=first.loss}
-    stats.moves++; stats.loss+=loss; if(g.tone==='best'||g.tone==='good')stats.best++; if(g.tone==='bad')stats.errors++; saveStats();
+    if(!assisted){stats.moves++; stats.loss+=loss; if(g.tone==='best'||g.tone==='good')stats.best++; if(g.tone==='bad')stats.errors++; saveStats();}
+    rec.assisted=assisted; if(hintAfterStop)rec.hintAfterStop=true;
     Object.assign(rec,{grade:g.label,tone:g.tone,loss:+loss.toFixed(4),best:deep?deep.bestN:BG.notation(best.steps),win:+wMine.toFixed(3),winBest:+wBest.toFixed(3)});
     if(deep)rec.deep={loss:+deep.loss.toFixed(4),bestN:deep.bestN,plays:deep.plays,plies:2};
     if(first){rec.firstTry=first;rec.final={played:myNot,grade:gF.label,loss:+lossF.toFixed(4)};rec.retries=S.tries||1}
@@ -1474,7 +1483,7 @@ function finishPlayerCore(pre){
     const li=S.log.findIndex(x=>x.includes(`data-rec="${recIdx}"`));
     if(li>=0)S.log[li]=entry; else S.log.unshift(entry);
     persist();
-    if(!R)showCoach({g:gF,loss:lossF,myNot,best,chosen,ranked,orig,dice,hinted,rec:recIdx,wMine,wBest,deep:!!deep,first});
+    if(!R)showCoach({g:gF,loss:lossF,myNot,best,chosen,ranked,orig,dice,hinted,rec:recIdx,wMine,wBest,deep:!!deep,first,assisted});
     render();
   };
   S.log.unshift(`<span data-rec-wait="${recIdx}" data-rec="${recIdx}"><span class="n">${dice.join('-')}</span> You: <span class="n">${myNot}</span> · checking…</span>`);
@@ -1509,6 +1518,7 @@ function showCoach(c){
   box.innerHTML=`<h2>Coach</h2>
    <div class="verdict">${c.rec!=null&&!R?`<button class="chipbtn" data-rec="${c.rec}"><span class="chip ${c.g.tone}">${c.g.label}</span><span>Show on board ›</span></button>`:`<span class="chip ${c.g.tone}">${c.g.label}</span>`}${c.loss>=0.01?`<span class="loss">loss ${c.loss.toFixed(3)}</span>`:''}${c.hinted?'<span class="loss">· hint used</span>':''}</div>
    <dl class="moves"><dt>Roll</dt><dd>${c.dice.join('-')}</dd><dt>You played</dt><dd>${esc(c.myNot)}</dd>${c.g.tone!=='best'?`<dt>Best play</dt><dd>${esc(BG.notation(c.best.steps))}</dd>`:''}</dl>
+   ${c.assisted?'<div class="note"><b>Hint used before this move:</b> it is logged as helped and left out of your PR and accuracy.</div>':''}
    ${c.first?`<div class="note">First try: ${esc(c.first.played)} (${c.first.grade}, loss ${(+c.first.loss).toFixed(3)}). Your stats count the first try.</div>`:''}
    ${c.deep?'<div class="note">Checked by GNU 2 rolls ahead</div>':''}
    ${c.wMine!=null?`<div class="note">Winning chances after your move <b>${Math.round(c.wMine*100)}%</b>${c.g.tone!=='best'&&Math.round(c.wBest*100)!==Math.round(c.wMine*100)?` · after the best play <b>${Math.round(c.wBest*100)}%</b> (you gave up ${Math.round((c.wBest-c.wMine)*100)} points)`:''}</div>`:''}
@@ -1742,10 +1752,13 @@ window.addEventListener('online',()=>syncGames());
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')syncGames(true)});
 /* ---------- stats dashboard ---------- */
 const GNU_SINCE=1792995012000; // games started after GNU became the coach
+const LVL_SHORT={beginner:'Beg.',intermediate:'Inter.',advanced:'Adv.',expert:'Expert',worldclass:'World',strong:'Expert',casual:'Inter.'};
 const LVL_NAME={beginner:'Beginner',intermediate:'Intermediate',advanced:'Advanced',expert:'Expert',worldclass:'World class',strong:'Expert',casual:'Intermediate'};
 function summarize(d){
   const rec=d.record||[];const ts=+String(d.id).slice(1)||Date.parse(d.startedAt)||0;
-  const mine=rec.filter(r=>r.who==='me'&&r.grade&&!r.auto&&!r.forced&&r.loss!=null);
+  const isAssisted=r=>r.assisted!=null?r.assisted:(!!r.hinted&&!r.firstTry);
+  const mine=rec.filter(r=>r.who==='me'&&r.grade&&!r.auto&&!r.forced&&r.loss!=null&&!isAssisted(r));
+  const helped=rec.filter(r=>r.who==='me'&&!r.auto&&isAssisted(r)).length, retried=rec.filter(r=>r.who==='me'&&r.firstTry).length;
   const opp=rec.find(r=>r.who==='opp'&&r.level);
   const res=d.result||'';let outcome=null,pts=0;
   if(/You win/.test(res)){outcome='W'}else if(/Opponent wins/.test(res)){outcome='L'}
@@ -1753,7 +1766,7 @@ function summarize(d){
   const loss=mine.reduce((a,r)=>a+r.loss,0);
   return {id:d.id,ts,date:d.startedAt||new Date(ts).toISOString(),updatedAt:d.updatedAt||'',level:opp?opp.level:null,outcome,pts,resigned:/resigned/.test(res),
     moves:mine.length,pr:mine.length?loss/mine.length*500:null,blunders:mine.filter(r=>r.grade==='Blunder').length,mistakes:mine.filter(r=>r.grade==='Mistake').length,
-    gnu:ts>=GNU_SINCE||!!d.regraded,deep:mine.some(r=>r.deep)};
+    helped,retried,gnu:ts>=GNU_SINCE||!!d.regraded,deep:mine.some(r=>r.deep)};
 }
 function summaries(){try{return JSON.parse(localStorage.getItem('bgc-summ')||'{}')}catch(e){return {}}}
 function saveSummary(x){if(!x||!x.id)return;try{const m=summaries();m[x.id]=x;localStorage.setItem('bgc-summ',JSON.stringify(m))}catch(e){}}
@@ -1784,14 +1797,19 @@ async function showDash(){
    <div class="tile"><span class="k">Games played</span><span class="v">${all.length}</span><span class="s">${fin.length} finished</span></div>
    <div class="tile"><span class="k">Won · lost</span><span class="v">${w} · ${l}</span><span class="s">${fin.length?Math.round(100*w/fin.length)+'% wins · '+(pts>0?'+':'')+pts+' points':'no finished games'}</span></div>
    <div class="tile"><span class="k">Your PR, last 10</span><span class="v">${pr10==null?'–':pr10.toFixed(1)}</span><span class="s">${tier(pr10)}${pr10!=null?' · lower is better':''}</span></div>
-   <div class="tile"><span class="k">Blunders per game</span><span class="v">${bl==null?'–':bl.toFixed(1)}</span><span class="s">GNU-graded games</span></div>`;
+   <div class="tile"><span class="k">Blunders per game</span><span class="v">${bl==null?'–':bl.toFixed(1)}</span><span class="s">${(()=>{const h=g.reduce((a,x)=>a+(x.helped||0),0);return h?h+' hinted move'+(h>1?'s':'')+' left out':'GNU-graded games'})()}</span></div>`;
   drawPR(g);
+  const T=[['World champion',0,2.5],['World class',2.5,5],['Expert',5,7.5],['Advanced',7.5,12.5],['Intermediate',12.5,17.5],['Casual',17.5,22.5],['Beginner',22.5,30],['Learning',30,null]];
+  const yi=pr10==null?-1:T.findIndex(([,a,b])=>b==null||pr10<b);
+  const nextT=yi>0?T[yi-1]:null;
+  $('dLadder').innerHTML='<div class="ladder">'+T.map(([n,a,b],i)=>`<div class="row${i===yi?' you':''}"><span>${n}${i===yi?' · you':''}</span><span>${b==null?a+'+':(a===0?'under '+b:a+' – '+b)}</span></div>`).join('')+'</div>'+
+    (nextT?`<div class="goal">Next: <b>${nextT[0]}</b> needs a PR under ${nextT[2]}. You're ${(pr10-nextT[2]).toFixed(1)} away (average of your last 10 games).</div>`:pr10==null?'<div class="goal note">Play a game to see where you stand.</div>':'');
   const fmt=d=>{const x=new Date(d);if(isNaN(x))return '';const p=n=>String(n).padStart(2,'0');return `${x.getDate()} ${x.toLocaleDateString(undefined,{month:'short'})} ${p(x.getHours())}:${p(x.getMinutes())}`};
-  const rows=all.slice().reverse().map(x=>`<tr><td>${fmt(x.date)}</td><td>${LVL_NAME[x.level]||'–'}</td>
+  const rows=all.slice().reverse().map(x=>`<tr><td>${fmt(x.date)}</td><td>${LVL_SHORT[x.level]||'–'}</td>
     <td>${x.outcome?`<span class="res ${x.outcome==='W'?'w':'l'}">${x.outcome}${Math.abs(x.pts)>1?' ×'+Math.abs(x.pts):''}</span>${x.resigned?' res.':''}`:'<span class="res o">–</span>'}</td>
-    <td>${x.pr==null?'–':x.pr.toFixed(1)}${x.gnu?'':'*'}</td><td>${x.blunders}</td></tr>`).join('');
-  $('dTable').innerHTML=`<thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>PR</th><th>Blunders</th></tr></thead><tbody>${rows||'<tr><td colspan="5">No games yet. Play one and it appears here.</td></tr>'}</tbody>`;
-  $('dNote').textContent='W/L ×2 = gammon, ×3 = backgammon, – = unfinished. '+(all.some(x=>!x.gnu)?'* Graded by the old built-in coach, before GNU; not comparable. ':'')+'PR here counts checker play only (no doubling cube), so it reads a bit lower than eXtreme Gammon\'s PR.';
+    <td>${x.pr==null?'–':x.pr.toFixed(1)}${x.gnu?'':'*'}</td><td>${x.blunders}</td><td>${(x.helped||0)+(x.retried||0)?`${x.helped||0}·${x.retried||0}`:'–'}</td></tr>`).join('');
+  $('dTable').innerHTML=`<thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>PR</th><th>Blun.</th><th>Help</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No games yet. Play one and it appears here.</td></tr>'}</tbody>`;
+  $('dNote').textContent='W/L ×2 = gammon, ×3 = backgammon, – = unfinished. Help = moves played after a hint · moves retried after a stop. Hinted moves are left out of PR; for retried moves PR uses your first try. '+(all.some(x=>!x.gnu)?'* Graded by the old built-in coach, before GNU; not comparable. ':'')+'PR here counts checker play only (no doubling cube), so it reads a bit lower than eXtreme Gammon\'s PR.';
 }
 function drawPR(g){
   const svg=$('dChart');svg.innerHTML='';const W=340,H=200,L=30,R=8,T=10,B=24;
@@ -1799,7 +1817,7 @@ function drawPR(g){
   if(g.length<1){mk('text',{x:W/2,y:H/2,'text-anchor':'middle','font-size':12,style:'fill:var(--muted)'}).textContent='Play a game to see your PR here';$('dLegend').innerHTML='';return}
   const max=Math.max(30,Math.ceil(Math.max(...g.map(x=>x.pr))/5)*5);
   const X=i=>g.length===1?(L+W-R)/2:L+i*(W-L-R)/(g.length-1), Y=v=>T+(H-T-B)*(v/max);
-  for(const [v,name] of [[5,'World class'],[7.5,'Expert'],[12.5,'Advanced'],[17.5,'Intermediate'],[22.5,'Casual']]){if(v>max)continue;
+  for(const [v,name] of [[5,'World class <5'],[7.5,'Expert <7.5'],[12.5,'Advanced <12.5'],[17.5,'Intermediate <17.5'],[22.5,'Casual <22.5']]){if(v>max)continue;
     mk('line',{x1:L,x2:W-R,y1:Y(v),y2:Y(v),style:'stroke:var(--line)','stroke-dasharray':'3 3'});
     mk('text',{x:W-R,y:Y(v)-2,'text-anchor':'end','font-size':8,style:'fill:var(--muted)'}).textContent=name}
   for(let v=0;v<=max;v+=10){mk('text',{x:L-4,y:Y(v)+3,'text-anchor':'end','font-size':9,style:'fill:var(--muted)'}).textContent=v}
@@ -1811,7 +1829,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.18';
+const APP_VERSION='v1.19';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
