@@ -170,7 +170,7 @@ ol.log .n{font-family:var(--mono)}
       <div id="syncForm" hidden style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <label for="ghToken" class="note">Fine-grained token for backgammon-games</label>
         <input id="ghToken" type="password" autocomplete="off" placeholder="github_pat_…" style="flex:1;min-width:0;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)">
-        <button class="btn small primary" id="ghSave">Save</button><button class="btn small" id="ghRemove">Remove</button>
+        <button class="btn small primary" id="ghSave">Save</button><button class="btn small" id="ghTest">Test</button><button class="btn small" id="ghRemove">Remove</button>
       </div>
     </div>
     <textarea id="copyArea" hidden readonly style="width:100%;height:90px;font-family:var(--mono);font-size:.7rem;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px"></textarea>
@@ -1781,8 +1781,10 @@ function persist(){
 const GH_REPO='mathiasmoslundDK/backgammon-games';
 const ghToken=()=>{try{return localStorage.getItem('bgc-gh-token')||''}catch(e){return ''}};
 let syncing=false;
-function syncNote(t){const n=$('syncNote');if(!n)return;if(t){n.textContent=t;return}
-  const pend=archive().filter(g=>!g.synced).length;n.textContent=ghToken()?(pend?`${pend} game${pend>1?'s':''} waiting to upload`:'All games uploaded'):'Off: games stay on this phone'}
+let noteAt=0;
+function syncNote(t,force){const n=$('syncNote');if(!n)return;if(t){n.textContent=t;noteAt=Date.now();return}
+  if(!force&&Date.now()-noteAt<20000)return;
+  const pend=archive().filter(g=>!g.synced).length;n.textContent=ghToken()?'Token …'+ghToken().slice(-4)+' · '+(pend?`${pend} game${pend>1?'s':''} waiting to upload`:'All games uploaded'):'Off: games stay on this phone'}
 const b64=str=>btoa(unescape(encodeURIComponent(str)));
 async function ghPut(g){
   const url=`https://api.github.com/repos/${GH_REPO}/contents/games/${g.id}.json`;
@@ -1799,14 +1801,33 @@ async function syncGames(force){
   const arr=archive();const todo=arr.filter(g=>!g.synced&&(g.result||force));
   if(!todo.length)return syncNote();
   syncing=true;syncNote('Uploading…');
-  try{for(const g of todo){await ghPut(g);g.synced=true;try{localStorage.setItem('bgc-archive',JSON.stringify(arr))}catch(e){}}syncNote()}
+  try{for(const g of todo){await ghPut(g);g.synced=true;try{localStorage.setItem('bgc-archive',JSON.stringify(arr))}catch(e){}}syncNote(null,true)}
   catch(e){syncNote(/401/.test(e.message)?'Token not accepted: paste a new one':/403|404/.test(e.message)?'Token can\'t write: on GitHub set this token\'s Contents permission to Read and write':'Upload failed, will retry: '+e.message)}
   finally{syncing=false}
 }
 $('syncSetup').onclick=()=>{$('syncForm').hidden=!$('syncForm').hidden};
 $('ghSave').onclick=()=>{const t=$('ghToken').value.trim();if(!t){syncNote('Paste a token first');return}
-  try{localStorage.setItem('bgc-gh-token',t)}catch(e){}$('ghToken').value='';$('syncForm').hidden=true;syncGames(true)};
-$('ghRemove').onclick=()=>{try{localStorage.removeItem('bgc-gh-token')}catch(e){}$('syncForm').hidden=true;syncNote()};
+  try{localStorage.setItem('bgc-gh-token',t)}catch(e){}$('ghToken').value='';ghTest()};
+// Checks each step of the connection and says exactly which one fails.
+async function ghTest(){
+  const t=ghToken();if(!t)return syncNote('No token saved yet: paste it and tap Save');
+  if(!navigator.onLine)return syncNote('No internet right now');
+  const hdr={Authorization:'Bearer '+t,Accept:'application/vnd.github+json'};
+  syncNote('Testing…');
+  try{
+    const u=await fetch('https://api.github.com/user',{headers:hdr});
+    if(u.status===401)return syncNote('✗ GitHub doesn\'t accept this token (wrong, expired or deleted). Make a new one and paste it.');
+    const r=await fetch(`https://api.github.com/repos/${GH_REPO}`,{headers:hdr});
+    if(!r.ok)return syncNote('✗ Token works, but it can\'t see backgammon-games. Edit the token: Repository access → select backgammon-games.');
+    const url=`https://api.github.com/repos/${GH_REPO}/contents/games/connection-test.json`;
+    let sha;const g=await fetch(url,{headers:hdr});if(g.ok)sha=(await g.json()).sha;
+    const w=await fetch(url,{method:'PUT',headers:{...hdr,'Content-Type':'application/json'},body:JSON.stringify({message:'Connection test',content:b64(JSON.stringify({tested:new Date().toISOString(),app:APP_VERSION})),...(sha?{sha}:{})})});
+    if(!w.ok)return syncNote(`✗ Token can read but not write (GitHub said ${w.status}). Edit the token: Repository permissions → Contents → Read and write.`);
+    syncNote('✓ Connected. Uploading games…');setTimeout(()=>syncGames(true),800);
+  }catch(e){syncNote('✗ Could not reach GitHub: '+e.message)}
+}
+$('ghTest').onclick=ghTest;
+$('ghRemove').onclick=()=>{try{localStorage.removeItem('bgc-gh-token')}catch(e){}$('syncForm').hidden=true;syncNote(null,true)};
 window.addEventListener('online',()=>syncGames());
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')syncGames(true)});
 /* ---------- stats dashboard ---------- */
@@ -1888,7 +1909,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.24';
+const APP_VERSION='v1.25';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
