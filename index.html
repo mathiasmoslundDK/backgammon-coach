@@ -1562,6 +1562,7 @@ function openReview(idx){
   if(dn&&BG.notation(mine.steps)===dn)mine.score=best.score;
   const plays=[];
   const isBest=mine===best;
+  plays.push({id:'before',label:'Before'});
   if(!isBest) plays.push({id:'compare',label:'Compare'});
   plays.push({id:'mine',label:isBest?'Your move (best)':'Your move',play:mine,color:'mine'});
   if(!isBest) plays.push({id:'best',label:'Best',play:best,color:'best'});
@@ -1570,7 +1571,7 @@ function openReview(idx){
   const wMine=BG.winProb(mine.pos), wBest=BG.winProb(best.pos);
   const turn=S.record.slice(0,idx+1).filter(x=>x.who==='me').length;
   const loss=t.deep?t.deep.loss:Math.max(0,best.score-mine.score);
-  R={idx,t,ranked,mine,best,plays,tab:plays[0].id,turn,g:BG.grade(loss)};
+  R={idx,t,ranked,mine,best,plays,tab:(plays.find(p=>p.id==='compare')||plays[1]||plays[0]).id,turn,g:BG.grade(loss)};
   const dw=n=>t.deep&&t.deep.plays.find(x=>x.n===n);
   const wM=(dw(t.played)||{}).win??wMine, wB=(dw(BG.notation(best.steps))||{}).win??wBest;
   showCoach({g:R.g,loss,myNot:t.played,best,chosen:mine,ranked,orig:t.pos,dice:t.dice,hinted:t.hinted,wMine:wM,wBest:wB,deep:!!t.deep});
@@ -1578,15 +1579,33 @@ function openReview(idx){
   document.querySelector('.board-wrap').scrollIntoView({behavior:'smooth',block:'start'});
 }
 function closeReview(){R=null; if(coachSaved!=null){$('coach').innerHTML=coachSaved;coachSaved=null} render()}
+// Faded checkers where yours stood before the move, rings on the checkers that moved in, and the opponent checker you hit.
+function drawGhosts(pre,post,color){
+  const c=COL[color]||COL.mine;
+  for(let i=1;i<=24;i++){
+    const {x,top}=col(i), a=Math.max(pre[i],0), b=Math.max(post[i],0);
+    if(a>b){for(let k=b;k<a;k++){const cy=stackY(top,k,a);
+      el('circle',{cx:x+12,cy,r:10.5,fill:'var(--white)','fill-opacity':.28,stroke:c,'stroke-width':1.6,'stroke-dasharray':'3 2'})}}
+    if(b>a){const n=b;for(let k=a;k<b;k++)el('circle',{cx:x+12,cy:stackY(top,k,n),r:12.5,fill:'none',stroke:c,'stroke-width':2.4})}
+    if(pre[i]<0&&post[i]>=0){const cy=stackY(top,b,b+1);
+      el('circle',{cx:x+12,cy,r:10.5,fill:'var(--black)','fill-opacity':.25,stroke:c,'stroke-width':1.6,'stroke-dasharray':'3 2'})}
+  }
+  if(pre[25]>post[25])for(let k=post[25];k<pre[25];k++)el('circle',{cx:164,cy:MID+22+k*20,r:10.5,fill:'var(--white)','fill-opacity':.28,stroke:c,'stroke-width':1.6,'stroke-dasharray':'3 2'});
+  if(post[26]>pre[26])for(let k=pre[26];k<post[26];k++)el('circle',{cx:164,cy:MID-22-k*20,r:12.5,fill:'none',stroke:c,'stroke-width':2.4});
+}
 function renderReview(){
   const {t,plays,mine,best,ranked}=R;
   const tab=plays.find(x=>x.id===R.tab)||plays[0];
-  if(tab.id==='compare'){
+  if(tab.id==='before'){
+    drawCheckers(t.pos,{});
+    drawDice(t.dice,248,null);
+  }else if(tab.id==='compare'){
     drawCheckers(t.pos,{});
     drawDice(t.dice,248,null);
     drawArrows(mine.steps,'mine',-3); drawArrows(best.steps,'best',3);
   }else{
     drawCheckers(tab.play.pos,{});
+    drawGhosts(t.pos,tab.play.pos,tab.color);
     drawDice(t.dice,248,null);
     drawArrows(tab.play.steps,tab.color,0);
   }
@@ -1595,14 +1614,17 @@ function renderReview(){
   const tabs=$('rvTabs'); tabs.innerHTML='';
   for(const p of plays){
     const b=document.createElement('button'); b.className='tab'; b.setAttribute('aria-pressed',String(p.id===tab.id));
-    b.innerHTML=(p.id==='compare'?`<span class="sw" style="background:${COL.mine}"></span><span class="sw" style="background:${COL.best}"></span>`:`<span class="sw" style="background:${COL[p.color]}"></span>`)+p.label;
+    b.innerHTML=p.id==='before'?p.label:(p.id==='compare'?`<span class="sw" style="background:${COL.mine}"></span><span class="sw" style="background:${COL.best}"></span>`:`<span class="sw" style="background:${COL[p.color]}"></span>`)+p.label;
     b.onclick=()=>{R.tab=p.id;render()}; tabs.appendChild(b);
   }
   const esc=x=>String(x).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
   const line=(p)=>`${esc(BG.notation(p.steps))} <span class="loss">· win ${Math.round(BG.winProb(p.pos)*100)}% · ${p.f.contact?p.f.shots+'/36 shots':'race'}</span>`;
-  $('rvPlay').innerHTML = tab.id==='compare'
+  const canHit=ranked.some(r=>r.steps.some(s=>s.hit)), canMake=ranked.some(r=>r.f.made.length>BG.analyze(t.pos).made.length);
+  $('rvPlay').innerHTML = tab.id==='before'
+    ? `<div>The position you faced, rolled ${t.dice.join('-')}.</div><div class="note">${canHit?'<b>A hit was possible with this roll.</b> ':'No hit was possible with this roll. '}${canMake?'You could also make a new point. ':''}Tap Your move and Best to compare what happened next.</div>`
+    : tab.id==='compare'
     ? `<div><span class="sw" style="background:${COL.mine}"></span> You: ${line(mine)}</div><div><span class="sw" style="background:${COL.best}"></span> Best: ${line(best)}</div><div class="note">Arrows show each checker's path on the position before the move.</div>`
-    : `<div>${line(tab.play)}</div><div class="note">Board shows the position after this play. "Shots" is how many of the opponent's 36 rolls hit you.</div>`;
+    : `<div>${line(tab.play)}</div><div class="note">Position after this play. Faded dashed checkers show where yours stood before, rings mark where they landed, and a dashed dark checker marks one you hit. "Shots" is how many of the opponent's 36 rolls hit you.</div>`;
 }
 $('rvBack').onclick=closeReview;
 function engineNote(){$('engineNote').textContent=BG.engine==='gnu'
