@@ -1684,7 +1684,7 @@ function summarize(d){
   const loss=mine.reduce((a,r)=>a+r.loss,0);
   return {id:d.id,ts,date:d.startedAt||new Date(ts).toISOString(),updatedAt:d.updatedAt||'',level:opp?opp.level:null,outcome,pts,resigned:/resigned/.test(res),
     moves:mine.length,pr:mine.length?loss/mine.length*500:null,blunders:mine.filter(r=>r.grade==='Blunder').length,mistakes:mine.filter(r=>r.grade==='Mistake').length,
-    gnu:ts>=GNU_SINCE,deep:mine.some(r=>r.deep)};
+    gnu:ts>=GNU_SINCE||!!d.regraded,deep:mine.some(r=>r.deep)};
 }
 function summaries(){try{return JSON.parse(localStorage.getItem('bgc-summ')||'{}')}catch(e){return {}}}
 function saveSummary(x){if(!x||!x.id)return;try{const m=summaries();m[x.id]=x;localStorage.setItem('bgc-summ',JSON.stringify(m))}catch(e){}}
