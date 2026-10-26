@@ -1881,7 +1881,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.22';
+const APP_VERSION='v1.23';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
@@ -1899,5 +1899,5 @@ window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude
 })();
 </script>
 
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(e=>console.warn('sw',e))}</script>
+<script>if('serviceWorker' in navigator){const had=!!navigator.serviceWorker.controller;navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>r.update()).catch(e=>console.warn('sw',e));navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had&&!window.__rl){window.__rl=1;location.reload()}})}</script>
 </body></html>
