@@ -1741,7 +1741,7 @@ async function syncGames(force){
   if(!todo.length)return syncNote();
   syncing=true;syncNote('Uploading…');
   try{for(const g of todo){await ghPut(g);g.synced=true;try{localStorage.setItem('bgc-archive',JSON.stringify(arr))}catch(e){}}syncNote()}
-  catch(e){syncNote(/401|403/.test(e.message)?'Token rejected: check it has Contents read and write on backgammon-games':'Upload failed, will retry: '+e.message)}
+  catch(e){syncNote(/401/.test(e.message)?'Token not accepted: paste a new one':/403|404/.test(e.message)?'Token can\'t write: on GitHub set this token\'s Contents permission to Read and write':'Upload failed, will retry: '+e.message)}
   finally{syncing=false}
 }
 $('syncSetup').onclick=()=>{$('syncForm').hidden=!$('syncForm').hidden};
@@ -1829,7 +1829,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.19';
+const APP_VERSION='v1.20';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
