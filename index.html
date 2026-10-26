@@ -86,6 +86,7 @@ ol.log .n{font-family:var(--mono)}
 .res{display:inline-block;min-width:22px;text-align:center;border-radius:6px;padding:1px 6px;font-weight:700;font-size:.74rem;color:#fff}
 .res.w{background:var(--best)}.res.l{background:var(--bad)}.res.o{background:var(--muted)}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:var(--muted)}
+.stoprow{display:flex;align-items:center;gap:8px;justify-content:flex-end}
 .review{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
 .rv-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .rv-head b{font-weight:600}
@@ -139,6 +140,9 @@ ol.log .n{font-family:var(--mono)}
     <button class="btn" id="doneBtn">Done</button>
     <button class="btn" id="hintBtn">Hint</button>
   </div>
+
+  <div class="stoprow"><label for="stopSel" class="note">Stop on mistakes</label>
+    <select id="stopSel"><option value="off">Off</option><option value="inaccuracy">Inaccuracy or worse</option><option value="mistake">Mistake or worse</option><option value="blunder">Blunders only</option></select></div>
 
   <div class="review" id="review" hidden>
     <div class="rv-head"><b id="rvTitle"></b><button class="btn small" id="rvBack">Back to game</button></div>
@@ -1291,6 +1295,8 @@ function renderUI(legal){
     else if(S.sel!=null) st=`${d}: tap a highlighted point.`;
     else st=`${d}: tap a checker to move.`+(S.hintText?' Hint: '+S.hintText:'');
   }
+  else if(ph==='checking') st='Checking your move…';
+  else if(ph==='stopped') st='Stopped: try again, ask for a hint, or keep your move.';
   else if(ph==='ai'&&S.ai&&S.ai.thinking&&!S.auto) st='Opponent is thinking…';
   else if(ph==='ai') st=S.auto?'The game is decided. Finishing it with best moves for both sides…':'Opponent is moving…';
   else if(ph==='over') st=S.over;
@@ -1363,6 +1369,8 @@ $('undoBtn').onclick=()=>{if(!S.hist.length)return;const h=S.hist.pop();S.pos=h.
 $('doneBtn').onclick=()=>{if(S.phase==='move'&&S.hist.length===S.M)finishPlayer()};
 $('hintBtn').onclick=()=>{if(S.phase!=='move')return;S.hinted=true;const db=BG.deepBest&&BG.deepBest(deepJob);S.hintText=BG.notation((db||S.ranked[0]).steps)+(db?' (GNU, 2 rolls ahead)':'');if(S.hist.length){S.hintText+=' (from the start of this turn)'}render()};
 $('newBtn').onclick=()=>newGame();
+$('stopSel').value=stopLevel();
+$('stopSel').onchange=e=>{try{localStorage.setItem('bgc-stop',e.target.value)}catch(_){}};
 const RES=['','a single game','a gammon','a backgammon'];
 function resignLevel(){const o=BG.onRoll?BG.onRoll(S.pos):null;if(!o)return 1;return o.lbg>0.5?3:o.lg>0.5?2:1}
 $('resignBtn').onclick=()=>{if(!(S.phase==='roll'||S.phase==='move'))return;S.resignLv=resignLevel();
@@ -1393,6 +1401,7 @@ function openingRoll(){
 let deepJob=null;
 function playerRoll(a,b){
   S.turnNo++;
+  S.firstTry=null;S.stopD=null;S.tries=0;
   S.dice=[a,b]; S.rem=BG.diceList(a,b); S.hist=[]; S.startPos=S.pos; S.sel=null; S.hinted=false; S.hintText='';
   const r=BG.rankPlays(S.pos,a,b); S.ranked=r.ranked; S.M=r.max;
   if(deepJob)deepJob.cancelled=true;
@@ -1411,7 +1420,37 @@ function playerRoll(a,b){
   if(S.pos[25]>0) S.sel=25;
   render();
 }
+/* ---------- stop on mistakes ---------- */
+function stopLevel(){try{return localStorage.getItem('bgc-stop')||'off'}catch(e){return 'off'}}
+function stopsOn(g,lv){return lv==='inaccuracy'?(g.tone==='warn'||g.tone==='bad'):lv==='mistake'?(g.label==='Mistake'||g.label==='Blunder'):lv==='blunder'?g.label==='Blunder':false}
 function finishPlayer(){
+  const lv=stopLevel();
+  if(lv==='off'||BG.engine!=='gnu'||!BG.deepCheck||S.ranked.length<2||S.auto)return finishPlayerCore(S.firstTry?{first:S.firstTry}:null);
+  const k=BG.key(S.pos),myNot=BG.notation(S.hist.map(h=>h.step)),gid=S.gameId;
+  S.phase='checking';render();
+  $('coach').innerHTML='<h2>Coach</h2><div class="verdict"><span class="chip neutral">Checking</span><span class="loss">GNU is looking 2 rolls ahead…</span></div><dl class="moves"><dt>Roll</dt><dd>'+S.dice.join('-')+'</dd><dt>You played</dt><dd>'+myNot+'</dd></dl>';
+  BG.deepCheck(S.ranked,k,deepJob).then(d=>{
+    if(S.gameId!==gid||S.phase!=='checking')return;
+    if(!d){S.phase='move';return finishPlayerCore(S.firstTry?{first:S.firstTry}:null)}
+    const g=BG.grade(d.loss);
+    if(stopsOn(g,lv)){
+      if(!S.firstTry)S.firstTry={played:myNot,grade:g.label,tone:g.tone,loss:+d.loss.toFixed(4)};
+      S.stopD=d;S.phase='stopped';showStop(g,d,myNot);render();
+    }else{S.phase='move';finishPlayerCore({d,first:S.firstTry})}
+  }).catch(e=>{console.warn(e);S.phase='move';finishPlayerCore(S.firstTry?{first:S.firstTry}:null)});
+}
+function showStop(g,d,myNot){
+  $('coach').innerHTML=`<h2>Coach</h2>
+   <div class="verdict"><span class="chip ${g.tone}">${g.label}</span><span class="loss">loss ${d.loss.toFixed(3)}</span></div>
+   <div>Stopped before the opponent moves. <b>${myNot}</b> wins ${Math.round(d.myWin*100)}%, and the best play wins ${Math.round(d.bestWin*100)}%. Can you find a better move?</div>
+   <div class="note" id="stopHint"></div>
+   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="stopRetry">Try again</button><button class="btn" id="stopHintBtn">Show hint</button><button class="btn" id="stopKeep">Keep my move</button></div>`;
+  $('stopRetry').onclick=()=>{S.tries=(S.tries||0)+1;S.pos=S.startPos;S.hist=[];S.rem=BG.diceList(S.dice[0],S.dice[1]);S.sel=S.pos[25]>0?25:null;S.phase='move';
+    $('coach').innerHTML=`<h2>Coach</h2><div>Try ${S.tries+1}: find a better move for ${S.dice.join('-')}. Hint is still available.</div>`;render()};
+  $('stopHintBtn').onclick=()=>{S.hinted=true;$('stopHint').textContent='GNU\'s best: '+d.bestN+'. Tap Try again and play it, or find it yourself.'};
+  $('stopKeep').onclick=()=>{S.phase='move';finishPlayerCore({d:S.stopD,first:S.firstTry})};
+}
+function finishPlayerCore(pre){
   const k=BG.key(S.pos);
   const ranked=S.ranked; const best0=ranked[0];
   const chosen=ranked.find(r=>BG.key(r.pos)===k)||ranked[ranked.length-1];
@@ -1422,21 +1461,26 @@ function finishPlayer(){
   const recIdx=S.record.length;
   const rec={who:'me',dice,pos:orig,steps,played:myNot,hinted,win:+wMine0.toFixed(3),forced:ranked.length<2};
   S.record.push(rec);
+  const first=pre&&pre.first&&pre.first.played!==myNot?pre.first:null;
   const finalize=(g,loss,best,wMine,wBest,deep)=>{
     if(S.gameId!==gid)return;
+    const gF=g,lossF=loss;
+    if(first){g={label:first.grade,tone:first.tone};loss=first.loss}
     stats.moves++; stats.loss+=loss; if(g.tone==='best'||g.tone==='good')stats.best++; if(g.tone==='bad')stats.errors++; saveStats();
     Object.assign(rec,{grade:g.label,tone:g.tone,loss:+loss.toFixed(4),best:deep?deep.bestN:BG.notation(best.steps),win:+wMine.toFixed(3),winBest:+wBest.toFixed(3)});
     if(deep)rec.deep={loss:+deep.loss.toFixed(4),bestN:deep.bestN,plays:deep.plays,plies:2};
+    if(first){rec.firstTry=first;rec.final={played:myNot,grade:gF.label,loss:+lossF.toFixed(4)};rec.retries=S.tries||1}
     const entry=`<button class="logbtn" data-rec="${recIdx}"><span class="n">${dice.join('-')}</span> You: <span class="n">${myNot}</span> · <span class="tone-${g.tone}">${g.label}</span>${g.tone!=='best'?` (best ${rec.best})`:''}</button>`;
     const li=S.log.findIndex(x=>x.includes(`data-rec="${recIdx}"`));
     if(li>=0)S.log[li]=entry; else S.log.unshift(entry);
     persist();
-    if(!R)showCoach({g,loss,myNot,best,chosen,ranked,orig,dice,hinted,rec:recIdx,wMine,wBest,deep:!!deep});
+    if(!R)showCoach({g:gF,loss:lossF,myNot,best,chosen,ranked,orig,dice,hinted,rec:recIdx,wMine,wBest,deep:!!deep,first});
     render();
   };
   S.log.unshift(`<span data-rec-wait="${recIdx}" data-rec="${recIdx}"><span class="n">${dice.join('-')}</span> You: <span class="n">${myNot}</span> · checking…</span>`);
   const quick=()=>{const loss=Math.max(0,best0.score-chosen.score);finalize(BG.grade(loss),loss,best0,wMine0,BG.winProb(best0.pos),null)};
-  if(BG.deepCheck&&BG.engine==='gnu'&&ranked.length>1){
+  if(pre&&pre.d){finalize(BG.grade(pre.d.loss),pre.d.loss,pre.d.best,pre.d.myWin,pre.d.bestWin,pre.d)}
+  else if(BG.deepCheck&&BG.engine==='gnu'&&ranked.length>1){
     $('coach').innerHTML='<h2>Coach</h2><div class="verdict"><span class="chip neutral">Checking</span><span class="loss">GNU is looking 2 rolls ahead…</span></div><dl class="moves"><dt>Roll</dt><dd>'+dice.join('-')+'</dd><dt>You played</dt><dd>'+myNot+'</dd></dl>';
     BG.deepCheck(ranked,k,deepJob).then(d=>{
       if(!d){quick();return}
@@ -1465,6 +1509,7 @@ function showCoach(c){
   box.innerHTML=`<h2>Coach</h2>
    <div class="verdict">${c.rec!=null&&!R?`<button class="chipbtn" data-rec="${c.rec}"><span class="chip ${c.g.tone}">${c.g.label}</span><span>Show on board ›</span></button>`:`<span class="chip ${c.g.tone}">${c.g.label}</span>`}${c.loss>=0.01?`<span class="loss">loss ${c.loss.toFixed(3)}</span>`:''}${c.hinted?'<span class="loss">· hint used</span>':''}</div>
    <dl class="moves"><dt>Roll</dt><dd>${c.dice.join('-')}</dd><dt>You played</dt><dd>${esc(c.myNot)}</dd>${c.g.tone!=='best'?`<dt>Best play</dt><dd>${esc(BG.notation(c.best.steps))}</dd>`:''}</dl>
+   ${c.first?`<div class="note">First try: ${esc(c.first.played)} (${c.first.grade}, loss ${(+c.first.loss).toFixed(3)}). Your stats count the first try.</div>`:''}
    ${c.deep?'<div class="note">Checked by GNU 2 rolls ahead</div>':''}
    ${c.wMine!=null?`<div class="note">Winning chances after your move <b>${Math.round(c.wMine*100)}%</b>${c.g.tone!=='best'&&Math.round(c.wBest*100)!==Math.round(c.wMine*100)?` · after the best play <b>${Math.round(c.wBest*100)}%</b> (you gave up ${Math.round((c.wBest-c.wMine)*100)} points)`:''}</div>`:''}
    ${why}
@@ -1766,7 +1811,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.17';
+const APP_VERSION='v1.18';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
