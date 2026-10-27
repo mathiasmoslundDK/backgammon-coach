@@ -1435,7 +1435,7 @@ $('resignNo').onclick=()=>{$('resignBox').hidden=true};
 $('resignYes').onclick=()=>{if(!(S.phase==='roll'||S.phase==='move'))return;
   if(S.phase==='move'){while(S.hist.length){const h=S.hist.pop();S.pos=h.pos;S.rem=h.rem}}
   S.over=`You resigned. Opponent wins ${RES[S.resignLv||1]}.`;S.log.unshift(`<b>${S.over}</b>`);
-  $('resignBox').hidden=true;pushWin(0);S.phase='over';S.sel=null;render();persist();setTimeout(()=>syncGames(),500)};
+  $('resignBox').hidden=true;pushWin(0);S.phase='over';S.sel=null;render();persist();if(R)closeReview();showSummary();setTimeout(()=>syncGames(),500)};
 // Opponent levels follow GNU Backgammon's own presets: noise added to its evaluations, or a deeper search.
 const LEVELS={beginner:{noise:0.06},intermediate:{noise:0.04},advanced:{noise:0.015},expert:{noise:0},worldclass:{noise:0,deep:true}};
 let level='expert';
@@ -1537,7 +1537,7 @@ function finishPlayerCore(pre){
     const li=S.log.findIndex(x=>x.includes(`data-rec="${recIdx}"`));
     if(li>=0)S.log[li]=entry; else S.log.unshift(entry);
     persist();
-    if(!R)showCoach({g:gF,loss:lossF,myNot,best,chosen,ranked,orig,dice,hinted,rec:recIdx,wMine,wBest,deep:!!deep,first,assisted,dq:deep?{my:deep.myEq,best:deep.bestEq,plays:deep.plays}:null});
+    if(S.phase==='over'){if(!R)showSummary()}else if(!R)showCoach({g:gF,loss:lossF,myNot,best,chosen,ranked,orig,dice,hinted,rec:recIdx,wMine,wBest,deep:!!deep,first,assisted,dq:deep?{my:deep.myEq,best:deep.bestEq,plays:deep.plays}:null});
     render();
   };
   S.log.unshift(`<span data-rec-wait="${recIdx}" data-rec="${recIdx}"><span class="n">${dice.join('-')}</span> You: <span class="n">${myNot}</span> · checking…</span>`);
@@ -1656,7 +1656,34 @@ function endGame(won){
   else { if(p[0]===0){ kind='gammon'; let bg=p[25]>0; for(let i=19;i<=24;i++) if(p[i]>0) bg=true; if(bg)kind='backgammon'; } }
   S.over=won?`You win a ${kind}!`:`Opponent wins a ${kind}.`;
   S.log.unshift(`<b>${S.over}</b>`);
-  pushWin(won?1:0); S.phase='over'; render(); persist(); setTimeout(()=>syncGames&&syncGames(),500);
+  pushWin(won?1:0); S.phase='over'; render(); persist(); if(!R)showSummary(); setTimeout(()=>syncGames&&syncGames(),500);
+}
+/* ---------- end-of-game summary ---------- */
+function showSummary(){
+  const sm=summarize({id:S.gameId,startedAt:S.startedAt,record:S.record,result:S.over});
+  const isA=r=>r.assisted!=null?r.assisted:!!r.hinted;
+  const mine=S.record.map((r,i)=>({r,i})).filter(x=>x.r.who==='me'&&!x.r.auto);
+  const graded=mine.filter(x=>x.r.grade&&!x.r.forced&&!isA(x.r));
+  const pending=mine.filter(x=>!x.r.grade&&!x.r.forced).length;
+  const forced=mine.filter(x=>x.r.forced).length;
+  const cnt=l=>graded.filter(x=>x.r.grade===l||(l==='Best'&&x.r.grade==='Best move')).length;
+  const prev=Object.values(summaries()).filter(x=>x.id!==S.gameId&&x.gnu&&x.pr!=null&&x.moves>=5).sort((a,b)=>a.ts-b.ts).slice(-10);
+  const avg=prev.length?prev.reduce((a,x)=>a+x.pr,0)/prev.length:null;
+  const pr=sm.pr;
+  const cmp=pr==null||avg==null?'':pr<avg-0.5?`better than your last ${prev.length}-game average (${avg.toFixed(1)})`:pr>avg+0.5?`worse than your last ${prev.length}-game average (${avg.toFixed(1)})`:`about your last ${prev.length}-game average (${avg.toFixed(1)})`;
+  const acc=graded.length?Math.round(100*graded.filter(x=>/^(Best|Best move|Good)$/.test(x.r.grade)).length/graded.length):null;
+  const worst=graded.filter(x=>x.r.loss>=0.02).sort((a,b)=>b.r.loss-a.r.loss).slice(0,3);
+  const tone=pr==null?'neutral':pr<7.5?'best':pr<12.5?'good':pr<22.5?'warn':'bad';
+  const row=(l,t)=>`<div class="tile" style="padding:10px 6px;align-items:center"><span class="k">${l==='Inaccuracy'?'Inacc.':l}</span><span class="v tone-${t}">${cnt(l)}</span></div>`;
+  const totalLoss=graded.reduce((a,x)=>a+x.r.loss,0);
+  const lvl=(S.record.find(r=>r.who==='opp'&&r.level)||{}).level||$('lvl').value;
+  $('coach').innerHTML=`<h2>Game summary</h2>
+   <div style="font-weight:700;margin-bottom:6px">${S.over||''}</div>
+   <div class="verdict"><span class="chip ${tone}">PR ${pr==null?'–':pr.toFixed(1)}</span><span class="loss">${pr==null?'not enough graded moves':tier(pr)+' level'}${cmp?' · '+cmp:''}</span></div>
+   <p style="color:var(--muted);font-size:.85rem;margin:6px 0 10px">PR = average equity lost per decision × 500, lower is better. ${acc!=null?`${acc}% of your moves were best or good. `:''}Opponent: ${LVL_NAME[lvl]||lvl}.</p>
+   <div class="tiles" style="grid-template-columns:repeat(5,minmax(0,1fr))">${row('Best','best')}${row('Good','good')}${row('Inaccuracy','warn')}${row('Mistake','bad')}${row('Blunder','bad')}</div>
+   <p style="color:var(--muted);font-size:.82rem;margin:8px 0">${graded.length} graded moves · equity lost ${totalLoss.toFixed(2)}${forced?` · ${forced} forced`:''}${sm.helped?` · ${sm.helped} with help (not counted)`:''}${sm.retried?` · ${sm.retried} stopped and retried (first try counted)`:''}${pending?` · grading ${pending} more…`:''}</p>
+   ${worst.length?`<div style="font-weight:700;margin:10px 0 4px">Costliest moves</div><div style="display:flex;flex-direction:column;gap:4px">${worst.map(x=>`<button class="logbtn" data-rec="${x.i}"><span class="n">${x.r.dice.join('-')}</span> You: <span class="n">${(x.r.firstTry||{}).played||x.r.played}</span> · <span class="tone-${x.r.tone}">${x.r.grade}</span> (−${x.r.loss.toFixed(3)}, best ${x.r.best})</button>`).join('')}</div><p style="color:var(--muted);font-size:.8rem;margin-top:6px">Tap one to see it on the board.</p>`:'<p>No costly moves this game.</p>'}`;
 }
 function newGame(){if(deepJob)deepJob.cancelled=true;if(typeof hideDash==='function')hideDash();if(R)closeReview();S=freshState();$('coach').innerHTML='<h2>Coach</h2><div class="empty">After each of your moves, the coach grades it against every legal play for that roll and explains what the best play does better.</div>';render()}
 
@@ -1918,7 +1945,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.26';
+const APP_VERSION='v1.27';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
