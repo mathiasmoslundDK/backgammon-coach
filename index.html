@@ -113,7 +113,7 @@ ol.log .n{font-family:var(--mono)}
     <h1>Backgammon Coach <span class="ver" id="ver"></span></h1>
     <div class="hdr-ctl">
       <label for="lvl" class="note">Opponent</label>
-      <select id="lvl"><option value="beginner">1 · Beginner</option><option value="intermediate">2 · Intermediate</option><option value="advanced">3 · Advanced</option><option value="expert">4 · Expert</option><option value="worldclass">5 · World class</option></select>
+      <select id="lvl"><option value="beginner">1 · Beginner (PR ~40)</option><option value="intermediate">2 · Intermediate (PR ~18)</option><option value="advanced">3 · Advanced (PR ~10)</option><option value="expert">4 · Expert (PR ~5)</option><option value="worldclass">5 · World class (full GNU)</option></select>
       <button class="btn small" id="statsBtn">Stats</button>
       <button class="btn small" id="resignBtn">Resign</button>
       <button class="btn small" id="newBtn">New game</button>
@@ -1437,7 +1437,8 @@ $('resignYes').onclick=()=>{if(!(S.phase==='roll'||S.phase==='move'))return;
   S.over=`You resigned. Opponent wins ${RES[S.resignLv||1]}.`;S.log.unshift(`<b>${S.over}</b>`);
   $('resignBox').hidden=true;pushWin(0);S.phase='over';S.sel=null;render();persist();if(R)closeReview();showSummary();setTimeout(()=>syncGames(),500)};
 // Opponent levels follow GNU Backgammon's own presets: noise added to its evaluations, or a deeper search.
-const LEVELS={beginner:{noise:0.06},intermediate:{noise:0.04},advanced:{noise:0.015},expert:{noise:0},worldclass:{noise:0,deep:true}};
+// Noise calibrated Nov 2026 by self-play against 0-ply GNU: PR ≈ 40 / 18 / 10 / 5 / ~2.
+const LEVELS={beginner:{noise:0.088},intermediate:{noise:0.04},advanced:{noise:0.0254},expert:{noise:0.015},worldclass:{noise:0,deep:true}};
 let level='expert';
 try{level=localStorage.getItem('bgc-level')||'expert'}catch(e){}
 level=({strong:'expert',casual:'intermediate'})[level]||level; if(!LEVELS[level])level='expert';
@@ -1867,6 +1868,7 @@ $('ghRemove').onclick=()=>{try{localStorage.removeItem('bgc-gh-token')}catch(e){
 window.addEventListener('online',()=>syncGames());
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')syncGames(true)});
 /* ---------- stats dashboard ---------- */
+const LV2_SINCE=1793545026366;
 const GNU_SINCE=1792995012000; // games started after GNU became the coach
 const LVL_SHORT={beginner:'Beg.',intermediate:'Inter.',advanced:'Adv.',expert:'Expert',worldclass:'World',strong:'Expert',casual:'Inter.'};
 const LVL_NAME={beginner:'Beginner',intermediate:'Intermediate',advanced:'Advanced',expert:'Expert',worldclass:'World class',strong:'Expert',casual:'Intermediate'};
@@ -1876,11 +1878,13 @@ function summarize(d){
   const mine=rec.filter(r=>r.who==='me'&&r.grade&&!r.auto&&!r.forced&&r.loss!=null&&!isAssisted(r));
   const helped=rec.filter(r=>r.who==='me'&&!r.auto&&isAssisted(r)).length, retried=rec.filter(r=>r.who==='me'&&r.firstTry).length;
   const opp=rec.find(r=>r.who==='opp'&&r.level);
+  // Levels were re-spaced at LV2_SINCE: old Advanced (PR ~5) = new Expert, old Expert (0-ply GNU) ≈ new World class.
+  const lvOld=opp&&ts<LV2_SINCE?({advanced:'expert',expert:'worldclass'})[opp.level]:null;
   const res=d.result||'';let outcome=null,pts=0;
   if(/You win/.test(res)){outcome='W'}else if(/Opponent wins/.test(res)){outcome='L'}
   if(outcome){pts=/backgammon/.test(res)?3:/gammon/.test(res)?2:1;if(outcome==='L')pts=-pts}
   const loss=mine.reduce((a,r)=>a+r.loss,0);
-  return {id:d.id,ts,date:d.startedAt||new Date(ts).toISOString(),updatedAt:d.updatedAt||'',level:opp?opp.level:null,outcome,pts,resigned:/resigned/.test(res),
+  return {id:d.id,ts,date:d.startedAt||new Date(ts).toISOString(),updatedAt:d.updatedAt||'',level:opp?(lvOld||opp.level):null,outcome,pts,resigned:/resigned/.test(res),
     moves:mine.length,pr:mine.length?loss/mine.length*500:null,blunders:mine.filter(r=>r.grade==='Blunder').length,mistakes:mine.filter(r=>r.grade==='Mistake').length,
     helped,retried,gnu:ts>=GNU_SINCE||!!d.regraded,deep:mine.some(r=>r.deep)};
 }
@@ -1945,7 +1949,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.27';
+const APP_VERSION='v1.28';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
