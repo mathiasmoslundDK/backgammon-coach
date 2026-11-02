@@ -105,6 +105,28 @@ ol.log .n{font-family:var(--mono)}
 .chipbtn{appearance:none;border:0;background:none;padding:0;cursor:pointer;font:inherit;display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem}
 .chipbtn .chip{cursor:pointer}
 .empty{color:var(--muted);font-size:.92rem}
+/* rank change */
+.rankbox{margin:12px 0 4px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.rankbox .k{font-size:.78rem;color:var(--muted)}.rankbox .num{font-family:var(--display);font-size:2rem;font-variant-numeric:tabular-nums;line-height:1}
+.rankbox .delta{font-weight:700;font-size:.9rem}.rankbox .delta.up{color:var(--best)}.rankbox .delta.down{color:var(--bad)}
+.rankbox .tier{font-size:.85rem;color:var(--muted);text-align:right}
+.rankfx{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);animation:rkFade .3s ease-out;overflow:hidden;cursor:pointer}
+.rankfx .card{position:relative;background:var(--surface);border-radius:20px;padding:28px 26px;text-align:center;max-width:300px;width:calc(100% - 48px);box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.rankfx.promo .card{border:3px solid var(--gold);animation:rkPop .6s cubic-bezier(.2,1.6,.4,1)}
+.rankfx.demo .card{border:3px solid var(--bad);animation:rkDrop .7s ease-out}
+.rankfx .arrow{font-size:3.2rem;line-height:1}
+.rankfx.promo .arrow{color:var(--gold);animation:rkRise 1.2s ease-in-out infinite alternate}
+.rankfx.demo .arrow{color:var(--bad)}
+.rankfx h3{font-family:var(--display);font-size:1.7rem;margin:8px 0 4px}
+.rankfx .from{color:var(--muted);text-decoration:line-through;font-size:.95rem}
+.rankfx .to{font-size:1.25rem;font-weight:700;margin-top:2px}
+.rankfx .sub{color:var(--muted);font-size:.82rem;margin-top:10px}
+.rankfx i{position:absolute;top:-12px;width:8px;height:14px;border-radius:2px;animation:rkFall linear forwards}
+@keyframes rkFade{from{opacity:0}to{opacity:1}}
+@keyframes rkPop{0%{transform:scale(.4);opacity:0}100%{transform:scale(1);opacity:1}}
+@keyframes rkDrop{0%{transform:translateY(-60px);opacity:0}60%{transform:translateY(8px);opacity:1}75%{transform:translateX(-6px)}85%{transform:translateX(6px)}100%{transform:none}}
+@keyframes rkRise{from{transform:translateY(4px)}to{transform:translateY(-6px)}}
+@keyframes rkFall{to{transform:translateY(110vh) rotate(720deg)}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
 
@@ -1659,6 +1681,38 @@ function endGame(won){
   S.log.unshift(`<b>${S.over}</b>`);
   pushWin(won?1:0); S.phase='over'; render(); persist(); if(!R)showSummary(); setTimeout(()=>syncGames&&syncGames(),500);
 }
+/* ---------- rank change after a game ---------- */
+const TIERS=['World champion','World class','Expert','Advanced','Intermediate','Casual','Beginner','Learning'];
+function rankCalc(curPr){
+  const prior=Object.values(summaries()).filter(x=>x.id!==S.gameId&&x.gnu&&x.pr!=null).sort((a,b)=>a.ts-b.ts);
+  if(prior.length<3)return null;
+  const avg=a=>a.reduce((s,x)=>s+x,0)/a.length;
+  const before=avg(prior.slice(-10).map(x=>x.pr)), after=avg([...prior.slice(-9).map(x=>x.pr),curPr]);
+  return {before,after,tb:tier(before),ta:tier(after)};
+}
+function rankBox(rk,final){
+  const d=rk.after-rk.before, better=d<0;
+  return `<div class="rankbox"><div><div class="k">Your PR, last 10 games</div><div class="num" id="rkNum">${(final?rk.after:rk.before).toFixed(1)}</div></div>
+   <div class="tier"><div class="delta ${better?'up':'down'}" id="rkDelta" style="${final?'':'opacity:0'}">${Math.abs(d)<0.05?'±0.0':(better?'▼ ':'▲ ')+Math.abs(d).toFixed(1)}${Math.abs(d)<0.05?'':better?' better':' worse'}</div><div id="rkTier">${final?rk.ta:rk.tb}</div></div></div>`;
+}
+function animateRank(rk){
+  const el=$('rkNum'),de=$('rkDelta'),ti=$('rkTier');if(!el)return;
+  try{el.closest('.rankbox').scrollIntoView({behavior:'smooth',block:'center'})}catch(e){}
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const dur=reduce?0:1600,t0=performance.now();
+  const step=t=>{const k=dur?Math.min(1,(t-t0)/dur):1,e=1-Math.pow(1-k,3);const v=rk.before+(rk.after-rk.before)*e;
+    if(el.isConnected){el.textContent=v.toFixed(1);ti.textContent=tier(v)}
+    if(k<1)requestAnimationFrame(step);else{if(de)de.style.cssText='opacity:1;transition:opacity .4s';if(ti)ti.textContent=rk.ta;if(rk.ta!==rk.tb)setTimeout(()=>rankFx(rk),reduce?0:350)}};
+  setTimeout(()=>requestAnimationFrame(step),reduce?0:500);
+}
+function rankFx(rk){
+  const up=TIERS.indexOf(rk.ta)<TIERS.indexOf(rk.tb);
+  const fx=document.createElement('div');fx.className='rankfx '+(up?'promo':'demo');
+  let conf='';if(up){const cols=['#d4a017','#2e9d6a','#3a7bd5','#e0564b','#f2c14e'];for(let i=0;i<40;i++)conf+=`<i style="left:${Math.random()*100}%;background:${cols[i%5]};animation-duration:${1.8+Math.random()*1.8}s;animation-delay:${Math.random()*0.6}s"></i>`}
+  fx.innerHTML=`${conf}<div class="card"><div class="arrow">${up?'▲':'▼'}</div><h3>${up?'Promoted!':'Demoted'}</h3><div class="from">${rk.tb}</div><div class="to">${rk.ta}</div>
+    <div class="sub">10-game PR ${rk.before.toFixed(1)} → ${rk.after.toFixed(1)}${up?'':' · one bad game moves it, the next good one can win it back'}</div><div class="sub">Tap to close</div></div>`;
+  fx.onclick=()=>fx.remove();document.body.appendChild(fx);setTimeout(()=>fx.isConnected&&fx.remove(),up?6000:5000);
+}
 /* ---------- end-of-game summary ---------- */
 function showSummary(){
   const sm=summarize({id:S.gameId,startedAt:S.startedAt,record:S.record,result:S.over});
@@ -1668,7 +1722,7 @@ function showSummary(){
   const pending=mine.filter(x=>!x.r.grade&&!x.r.forced).length;
   const forced=mine.filter(x=>x.r.forced).length;
   const cnt=l=>graded.filter(x=>x.r.grade===l||(l==='Best'&&x.r.grade==='Best move')).length;
-  const prev=Object.values(summaries()).filter(x=>x.id!==S.gameId&&x.gnu&&x.pr!=null&&x.moves>=5).sort((a,b)=>a.ts-b.ts).slice(-10);
+  const prev=Object.values(summaries()).filter(x=>x.id!==S.gameId&&x.gnu&&x.pr!=null).sort((a,b)=>a.ts-b.ts).slice(-10);
   const avg=prev.length?prev.reduce((a,x)=>a+x.pr,0)/prev.length:null;
   const pr=sm.pr;
   const cmp=pr==null||avg==null?'':pr<avg-0.5?`better than your last ${prev.length}-game average (${avg.toFixed(1)})`:pr>avg+0.5?`worse than your last ${prev.length}-game average (${avg.toFixed(1)})`:`about your last ${prev.length}-game average (${avg.toFixed(1)})`;
@@ -1678,13 +1732,19 @@ function showSummary(){
   const row=(l,t)=>`<div class="tile" style="padding:10px 6px;align-items:center"><span class="k">${l==='Inaccuracy'?'Inacc.':l}</span><span class="v tone-${t}">${cnt(l)}</span></div>`;
   const totalLoss=graded.reduce((a,x)=>a+x.r.loss,0);
   const lvl=(S.record.find(r=>r.who==='opp'&&r.level)||{}).level||$('lvl').value;
+  let rkHtml='',rkAnim=null;
+  if(!pending&&pr!=null){
+    if(!S.rank){S.rank=rankCalc(pr)||{none:true};if(!S.rank.none)rkAnim=S.rank}
+    if(!S.rank.none)rkHtml=rankBox(S.rank,!rkAnim);
+  }else if(pending)rkHtml='<div class="rankbox"><div class="k">Updating your 10-game PR when grading finishes…</div></div>';
   $('coach').innerHTML=`<h2>Game summary</h2>
    <div style="font-weight:700;margin-bottom:6px">${S.over||''}</div>
    <div class="verdict"><span class="chip ${tone}">PR ${pr==null?'–':pr.toFixed(1)}</span><span class="loss">${pr==null?'not enough graded moves':tier(pr)+' level'}${cmp?' · '+cmp:''}</span></div>
-   <p style="color:var(--muted);font-size:.85rem;margin:6px 0 10px">PR = average equity lost per decision × 500, lower is better. ${acc!=null?`${acc}% of your moves were best or good. `:''}Opponent: ${LVL_NAME[lvl]||lvl}.</p>
+   <p style="color:var(--muted);font-size:.85rem;margin:6px 0 10px">PR = average equity lost per decision × 500, lower is better. ${acc!=null?`${acc}% of your moves were best or good. `:''}Opponent: ${LVL_NAME[lvl]||lvl}.</p>${rkHtml}
    <div class="tiles" style="grid-template-columns:repeat(5,minmax(0,1fr))">${row('Best','best')}${row('Good','good')}${row('Inaccuracy','warn')}${row('Mistake','bad')}${row('Blunder','bad')}</div>
    <p style="color:var(--muted);font-size:.82rem;margin:8px 0">${graded.length} graded moves · equity lost ${totalLoss.toFixed(2)}${forced?` · ${forced} forced`:''}${sm.helped?` · ${sm.helped} with help (not counted)`:''}${sm.retried?` · ${sm.retried} stopped and retried (first try counted)`:''}${pending?` · grading ${pending} more…`:''}</p>
    ${worst.length?`<div style="font-weight:700;margin:10px 0 4px">Costliest moves</div><div style="display:flex;flex-direction:column;gap:4px">${worst.map(x=>`<button class="logbtn" data-rec="${x.i}"><span class="n">${x.r.dice.join('-')}</span> You: <span class="n">${(x.r.firstTry||{}).played||x.r.played}</span> · <span class="tone-${x.r.tone}">${x.r.grade}</span> (−${x.r.loss.toFixed(3)}, best ${x.r.best})</button>`).join('')}</div><p style="color:var(--muted);font-size:.8rem;margin-top:6px">Tap one to see it on the board.</p>`:'<p>No costly moves this game.</p>'}`;
+  if(rkAnim)animateRank(rkAnim);
 }
 function newGame(){if(deepJob)deepJob.cancelled=true;if(typeof hideDash==='function')hideDash();if(R)closeReview();S=freshState();$('coach').innerHTML='<h2>Coach</h2><div class="empty">After each of your moves, the coach grades it against every legal play for that roll and explains what the best play does better.</div>';render()}
 
@@ -1949,7 +2009,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.28';
+const APP_VERSION='v1.29';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
