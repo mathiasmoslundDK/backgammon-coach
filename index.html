@@ -175,7 +175,7 @@ ol.log .n{font-family:var(--mono)}
     <h1>Backgammon Coach <span class="ver" id="ver"></span> <button class="bk" id="bk" type="button"></button></h1>
     <div class="hdr-ctl">
       <label for="lvl" class="note">Opponent</label>
-      <select id="lvl"><option value="beginner">1 · Beginner (PR ~40)</option><option value="intermediate">2 · Intermediate (PR ~18)</option><option value="advanced">3 · Advanced (PR ~10)</option><option value="expert">4 · Expert (PR ~5)</option><option value="worldclass">5 · World class (full GNU)</option></select>
+      <select id="lvl"><option value="match">⚖ Match my level</option><option value="beginner">1 · Beginner (PR ~40)</option><option value="intermediate">2 · Intermediate (PR ~18)</option><option value="advanced">3 · Advanced (PR ~10)</option><option value="expert">4 · Expert (PR ~5)</option><option value="worldclass">5 · World class (full GNU)</option></select>
       <button class="btn small" id="statsBtn">Stats</button>
       <button class="btn small" id="resignBtn">Resign</button>
       <button class="btn small" id="newBtn">New game</button>
@@ -1501,7 +1501,7 @@ $('resignYes').onclick=()=>{if(!(S.phase==='roll'||S.phase==='move'))return;
   $('resignBox').hidden=true;pushWin(0);S.phase='over';S.sel=null;render();persist();if(R)closeReview();showSummary();setTimeout(()=>syncGames(),500)};
 // Opponent levels follow GNU Backgammon's own presets: noise added to its evaluations, or a deeper search.
 // Noise calibrated Nov 2026 by self-play against 0-ply GNU: PR ≈ 40 / 18 / 10 / 5 / ~2.
-const LEVELS={beginner:{noise:0.088},intermediate:{noise:0.04},advanced:{noise:0.0254},expert:{noise:0.015},worldclass:{noise:0,deep:true}};
+const LEVELS={match:{noise:0},beginner:{noise:0.088},intermediate:{noise:0.04},advanced:{noise:0.0254},expert:{noise:0.015},worldclass:{noise:0,deep:true}};
 let level='expert';
 try{level=localStorage.getItem('bgc-level')||'expert'}catch(e){}
 level=({strong:'expert',casual:'intermediate'})[level]||level; if(!LEVELS[level])level='expert';
@@ -1686,7 +1686,7 @@ function aiTurn(a,b){
     if(i>=steps.length){
       S.ai.text=txt; S.ai.marks=marks;
       S.log.unshift(`<span class="n">${a}-${b}</span> Opp: <span class="n">${steps.length?BG.notation(steps):'no move'}</span> <span class="note">(their numbering)</span>`);
-      S.record.push({who:'opp',dice:[a,b],pos:fp,steps,played:steps.length?BG.notation(steps):'no move',level});
+      S.record.push({who:'opp',dice:[a,b],pos:fp,steps,played:steps.length?BG.notation(steps):'no move',level,...(level==='match'&&S.matchPr!=null?{oppPr:+S.matchPr.toFixed(1)}:{})});
       pushWin(1-BG.winProb(cur));persist();
       if(S.pos[27]===15){endGame(false);return}
       if(S.auto||decided()){S.auto=true;S.phase='ai';render();setTimeout(()=>{if(S.gameId===gid)autoMe()},250);return}
@@ -1703,7 +1703,8 @@ function aiTurn(a,b){
 function gauss(){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
 async function chooseOpp(ranked){
   if(!ranked.length)return null;
-  const L=LEVELS[level]||LEVELS.expert;
+  let L=LEVELS[level]||LEVELS.expert;
+  if(level==='match'){if(S.matchPr==null)S.matchPr=myLevelPr();L={noise:noiseForPr(S.matchPr)}}
   if(L.deep&&!S.auto&&BG.engine==='gnu'&&BG.deepPrepare&&ranked.length>1){
     render();
     const job=BG.deepPrepare(ranked,{n1:4,n2:3});await job.done;return BG.deepBest(job)||ranked[0];
@@ -1819,6 +1820,12 @@ function resultScreen(o){
     if(navigator.vibrate)try{navigator.vibrate(up?[30,40,60]:[80])}catch(e){}
   }
 }
+/* ---------- match my level ---------- */
+// Measured by self-play against 0-ply GNU (Nov 2026): equity noise σ → opponent PR. App noise = σ / 2.83.
+const PR_SIGMA=[[0,0],[5,.0425],[9,.065],[12,.08],[18.5,.114],[28,.17],[34,.2],[38,.23],[49,.3],[70,.42]];
+function noiseForPr(pr){pr=Math.max(0,Math.min(70,pr));for(let i=1;i<PR_SIGMA.length;i++){const [p1,s1]=PR_SIGMA[i-1],[p2,s2]=PR_SIGMA[i];if(pr<=p2)return (s1+(s2-s1)*(pr-p1)/(p2-p1))/2.83}return .42/2.83}
+function myLevelPr(){const g=ratingGames();if(g.length<3)return 20;return ratingTrack(g.map(x=>x.pr)).r}
+function matchLabel(){const o=document.querySelector('#lvl option[value="match"]');if(o)o.textContent=`⚖ Match my level (PR ~${myLevelPr().toFixed(1)})`}
 /* ---------- end-of-game summary ---------- */
 function quickGrade(r){
   // Fast 0-ply GNU grade for a move whose deep grade hasn't arrived yet.
@@ -1857,7 +1864,7 @@ function showSummary(){
   $('coach').innerHTML=`<h2>Game summary</h2>
    <div style="font-weight:700;margin-bottom:6px">${S.over||''}</div>
    <div class="verdict"><span class="chip ${tone}">PR ${pr==null?'–':pr.toFixed(1)}</span><span class="loss">${pr==null?'not enough graded moves':tier(pr)+' level'}${cmp?' · '+cmp:''}</span></div>
-   <p style="color:var(--muted);font-size:.85rem;margin:6px 0 10px">PR = average equity lost per decision × 500, lower is better. ${acc!=null?`${acc}% of your moves were best or good. `:''}Opponent: ${LVL_NAME[lvl]||lvl}.</p>${rkHtml}
+   <p style="color:var(--muted);font-size:.85rem;margin:6px 0 10px">PR = average equity lost per decision × 500, lower is better. ${acc!=null?`${acc}% of your moves were best or good. `:''}Opponent: ${LVL_NAME[lvl]||lvl}${lvl==='match'&&S.matchPr!=null?' (PR ~'+S.matchPr.toFixed(1)+')':''}.</p>${rkHtml}
    <div class="tiles" style="grid-template-columns:repeat(5,minmax(0,1fr))">${row('Best','best')}${row('Good','good')}${row('Inaccuracy','warn')}${row('Mistake','bad')}${row('Blunder','bad')}</div>
    <p style="color:var(--muted);font-size:.82rem;margin:8px 0">${eff.length} graded moves · equity lost ${totalLoss.toFixed(2)}${forced?` · ${forced} forced`:''}${sm.helped?` · ${sm.helped} with help (not counted)`:''}${sm.retried?` · ${sm.retried} stopped and retried (first try counted)`:''}${pending?` · ${pending} quick-graded, refining in the background (numbers may shift slightly)`:''}</p>
    ${worst.length?`<div style="font-weight:700;margin:10px 0 4px">Costliest moves</div><div style="display:flex;flex-direction:column;gap:4px">${worst.map(x=>`<button class="logbtn" data-rec="${x.i}"><span class="n">${x.r.dice.join('-')}</span> You: <span class="n">${x.played}</span> · <span class="tone-${x.tone}">${x.grade}</span> (−${x.loss.toFixed(3)}, best ${x.best})</button>`).join('')}</div><p style="color:var(--muted);font-size:.8rem;margin-top:6px">Tap one to see it on the board.</p>`:'<p>No costly moves this game.</p>'}`;
@@ -1867,7 +1874,7 @@ function showSummary(){
       gamePr:pr,acc,blunders:cnt('Blunder'),rk:S.rank&&!S.rank.none?S.rank:null});
   }
 }
-function newGame(){if(deepJob)deepJob.cancelled=true;if(typeof hideDash==='function')hideDash();if(R)closeReview();S=freshState();$('coach').innerHTML='<h2>Coach</h2><div class="empty">After each of your moves, the coach grades it against every legal play for that roll and explains what the best play does better.</div>';render()}
+function newGame(){try{matchLabel()}catch(e){}if(deepJob)deepJob.cancelled=true;if(typeof hideDash==='function')hideDash();if(R)closeReview();S=freshState();$('coach').innerHTML='<h2>Coach</h2><div class="empty">After each of your moves, the coach grades it against every legal play for that roll and explains what the best play does better.</div>';render()}
 
 /* ---------- review mode ---------- */
 let coachSaved=null;
@@ -2068,8 +2075,8 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 /* ---------- stats dashboard ---------- */
 const LV2_SINCE=1793545026366;
 const GNU_SINCE=1792995012000; // games started after GNU became the coach
-const LVL_SHORT={beginner:'Beg.',intermediate:'Inter.',advanced:'Adv.',expert:'Expert',worldclass:'World',strong:'Expert',casual:'Inter.'};
-const LVL_NAME={beginner:'Beginner',intermediate:'Intermediate',advanced:'Advanced',expert:'Expert',worldclass:'World class',strong:'Expert',casual:'Intermediate'};
+const LVL_SHORT={match:'Match',beginner:'Beg.',intermediate:'Inter.',advanced:'Adv.',expert:'Expert',worldclass:'World',strong:'Expert',casual:'Inter.'};
+const LVL_NAME={match:'Your level',beginner:'Beginner',intermediate:'Intermediate',advanced:'Advanced',expert:'Expert',worldclass:'World class',strong:'Expert',casual:'Intermediate'};
 function summarize(d){
   const rec=d.record||[];const ts=+String(d.id).slice(1)||Date.parse(d.startedAt)||0;
   const isAssisted=r=>r.assisted!=null?r.assisted:(!!r.hinted&&!r.firstTry);
@@ -2148,9 +2155,10 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.33';
+const APP_VERSION='v1.34';
 $('ver').textContent=APP_VERSION;
 function start(data){
+  matchLabel(); setTimeout(matchLabel,4000);
   $('syncBox').hidden=false; syncNote(null,true); setTimeout(()=>syncGames(true),1500);
   if(ghToken())setTimeout(()=>loadSummaries().catch(()=>{}),3000);
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; updateCopyNote(); } });
