@@ -122,6 +122,44 @@ ol.log .n{font-family:var(--mono)}
 .rankfx .to{font-size:1.25rem;font-weight:700;margin-top:2px}
 .rankfx .sub{color:var(--muted);font-size:.82rem;margin-top:10px}
 .rankfx i{position:absolute;top:-12px;width:8px;height:14px;border-radius:2px;animation:rkFall linear forwards}
+/* game-style results screen */
+.rs{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 35%,rgba(38,28,18,.97),rgba(8,6,4,.985));-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);animation:rkFade .25s ease-out;overflow:hidden;padding:env(safe-area-inset-top,0) 16px env(safe-area-inset-bottom,0)}
+.rs .panel{position:relative;width:100%;max-width:360px;text-align:center;color:#f6efe4;animation:rsUp .5s cubic-bezier(.2,1.3,.4,1)}
+.rs .title{font-family:var(--display);font-size:3rem;letter-spacing:.06em;line-height:1;margin:0;text-transform:uppercase}
+.rs.win .title{color:#f2c14e;text-shadow:0 0 24px rgba(242,193,78,.55);animation:rsGlow 1.6s ease-in-out infinite alternate}
+.rs.loss .title{color:#e0564b;text-shadow:0 0 18px rgba(224,86,75,.45)}
+.rs .tag{display:inline-block;margin-top:8px;padding:3px 12px;border-radius:999px;font-weight:800;font-size:.8rem;letter-spacing:.12em;background:rgba(255,255,255,.12)}
+.rs .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:22px 0 18px}
+.rs .st{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px 4px;opacity:0;transform:translateY(12px);animation:rsIn .4s ease-out forwards}
+.rs .st .k{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:#bfb3a2}
+.rs .st .v{font-family:var(--display);font-size:1.7rem;font-variant-numeric:tabular-nums;color:#fff8ec}
+.rs .big{color:#fff8ec}
+.rs .rank{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:18px;padding:18px 16px 16px;opacity:0;animation:rsIn .45s ease-out forwards}
+.rs .badge{width:92px;height:92px;margin:-62px auto 8px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-direction:column;background:radial-gradient(circle at 35% 30%,#fff3,transparent 60%),linear-gradient(160deg,var(--bc1,#8b7355),var(--bc2,#4a3a28));border:3px solid var(--bc3,#c79a3b);box-shadow:0 6px 24px rgba(0,0,0,.5);font-weight:800;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;line-height:1.15;padding:6px;transition:transform .3s}
+.rs .badge.pop{animation:rsPop .7s cubic-bezier(.2,1.8,.4,1)}
+.rs .badge.crack{animation:rsShake .6s ease-in-out}
+.rs .lbl{font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:#bfb3a2}
+.rs .big{font-family:var(--display);font-size:3.4rem;font-variant-numeric:tabular-nums;line-height:1.05}
+.rs .delta{font-weight:800;font-size:1rem;opacity:0;transition:opacity .35s}
+.rs .delta.up{color:#5fd39a}.rs .delta.down{color:#ff7a6e}
+.rs .bar{height:12px;border-radius:999px;background:rgba(255,255,255,.12);overflow:hidden;margin:14px 0 6px}
+.rs .bar i{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#c79a3b,#f2c14e)}
+.rs .ends{display:flex;justify-content:space-between;font-size:.7rem;color:#bfb3a2}
+.rs .banner{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.3);opacity:0;font-family:var(--display);font-size:2.6rem;font-weight:700;white-space:nowrap;pointer-events:none;letter-spacing:.04em}
+.rs .banner.go{animation:rsBanner 1.8s ease-out forwards}
+.rs .banner.promo{color:#f2c14e;text-shadow:0 0 30px rgba(242,193,78,.8)}
+.rs .banner.demo{color:#ff6b5e;text-shadow:0 0 24px rgba(255,80,60,.7)}
+.rs .flash{position:absolute;inset:0;pointer-events:none;opacity:0}
+.rs .flash.go{animation:rsFlash .7s ease-out}
+.rs .cont{margin-top:18px;appearance:none;border:0;border-radius:999px;padding:12px 34px;font:inherit;font-weight:800;letter-spacing:.08em;text-transform:uppercase;background:#f2c14e;color:#2a1d0c;cursor:pointer;opacity:0;animation:rsIn .4s ease-out forwards}
+.rs i.cf{position:absolute;top:-14px;width:8px;height:14px;border-radius:2px;animation:rkFall linear forwards}
+@keyframes rsUp{from{transform:translateY(60px) scale(.9);opacity:0}to{transform:none;opacity:1}}
+@keyframes rsIn{to{opacity:1;transform:none}}
+@keyframes rsGlow{from{text-shadow:0 0 14px rgba(242,193,78,.35)}to{text-shadow:0 0 34px rgba(242,193,78,.8)}}
+@keyframes rsPop{0%{transform:scale(1)}40%{transform:scale(1.35) rotate(-6deg)}100%{transform:scale(1)}}
+@keyframes rsShake{0%,100%{transform:none}20%{transform:translateX(-8px) rotate(-4deg)}40%{transform:translateX(8px) rotate(4deg)}60%{transform:translateX(-6px)}80%{transform:translateX(5px)}}
+@keyframes rsBanner{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}25%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}40%{transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-60%) scale(1)}}
+@keyframes rsFlash{0%{opacity:.75}100%{opacity:0}}
 @keyframes rkFade{from{opacity:0}to{opacity:1}}
 @keyframes rkPop{0%{transform:scale(.4);opacity:0}100%{transform:scale(1);opacity:1}}
 @keyframes rkDrop{0%{transform:translateY(-60px);opacity:0}60%{transform:translateY(8px);opacity:1}75%{transform:translateX(-6px)}85%{transform:translateX(6px)}100%{transform:none}}
@@ -1713,41 +1751,102 @@ function rankFx(rk){
     <div class="sub">10-game PR ${rk.before.toFixed(1)} → ${rk.after.toFixed(1)}${up?'':' · one bad game moves it, the next good one can win it back'}</div><div class="sub">Tap to close</div></div>`;
   fx.onclick=()=>fx.remove();document.body.appendChild(fx);setTimeout(()=>fx.isConnected&&fx.remove(),up?6000:5000);
 }
+const TBANDS={'World champion':[0,2.5],'World class':[2.5,5],'Expert':[5,7.5],'Advanced':[7.5,12.5],'Intermediate':[12.5,17.5],'Casual':[17.5,22.5],'Beginner':[22.5,30],'Learning':[30,45]};
+const TCOL={'World champion':['#f5d67a','#b8860b','#fff1b8'],'World class':['#d9e6f2','#6f8aa8','#e8f1fa'],'Expert':['#c78bd9','#5b2c73','#e6b8f5'],'Advanced':['#6fb1e8','#1f4f80','#a8d4f7'],'Intermediate':['#6fd1a0','#1f6b48','#a8f0cc'],'Casual':['#e0b070','#7a4f1c','#f2d0a0'],'Beginner':['#b0a090','#4f4438','#d6cbbd'],'Learning':['#9a8f86','#3d3630','#c4bab1']};
+function tierProg(v){const t=tier(v),[lo,hi]=TBANDS[t];return {t,p:Math.max(0,Math.min(1,(hi-v)/(hi-lo))),lo,hi}}
+function setBadge(el,t){const c=TCOL[t]||TCOL.Learning;el.style.setProperty('--bc1',c[0]);el.style.setProperty('--bc2',c[1]);el.style.setProperty('--bc3',c[2]);el.textContent=t}
+function resultScreen(o){
+  // o: {title, tag, win, gamePr, acc, blunders, rk}
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const old=document.querySelector('.rs');if(old)old.remove();
+  const el=document.createElement('div');el.className='rs '+(o.win?'win':'loss');
+  const rk=o.rk;
+  el.innerHTML=`<div class="flash"></div><div class="panel">
+    <h2 class="title">${o.title}</h2>${o.tag?`<div class="tag">${o.tag}</div>`:''}
+    <div class="stats">
+      <div class="st" style="animation-delay:.35s"><div class="k">Game PR</div><div class="v" id="rsPr">–</div></div>
+      <div class="st" style="animation-delay:.5s"><div class="k">Best/good</div><div class="v">${o.acc==null?'–':o.acc+'%'}</div></div>
+      <div class="st" style="animation-delay:.65s"><div class="k">Blunders</div><div class="v">${o.blunders}</div></div>
+    </div>
+    ${rk?`<div class="rank" style="animation-delay:.9s;margin-top:54px"><div class="badge" id="rsBadge"></div>
+      <div class="lbl">PR · last 10 games</div><div class="big" id="rsBig">${rk.before.toFixed(1)}</div>
+      <div class="delta ${rk.after<rk.before?'up':'down'}" id="rsDelta">${Math.abs(rk.after-rk.before)<0.05?'±0.0':(rk.after<rk.before?'▼ ':'▲ ')+Math.abs(rk.after-rk.before).toFixed(1)+(rk.after<rk.before?' better':' worse')}</div>
+      <div class="bar"><i id="rsBar"></i></div><div class="ends"><span id="rsLo"></span><span id="rsHi"></span></div></div>`:
+      `<div class="lbl" style="margin-top:8px">Play ${3} games to unlock your rank</div>`}
+    <button class="cont" style="animation-delay:${rk?2.9:1.2}s">Continue</button>
+    <div class="banner" id="rsBanner"></div></div>`;
+  document.body.appendChild(el);
+  const close=()=>{el.style.transition='opacity .25s';el.style.opacity='0';setTimeout(()=>el.remove(),260)};
+  el.querySelector('.cont').onclick=close;
+  // game PR count-up
+  const prEl=el.querySelector('#rsPr');const t0=performance.now();
+  const cu=t=>{const k=reduce?1:Math.min(1,(t-t0-400)/900);if(k<0){requestAnimationFrame(cu);return}prEl.textContent=o.gamePr==null?'–':(o.gamePr*(1-Math.pow(1-k,3))).toFixed(1);if(k<1)requestAnimationFrame(cu)};requestAnimationFrame(cu);
+  if(!rk)return;
+  const badge=el.querySelector('#rsBadge'),big=el.querySelector('#rsBig'),bar=el.querySelector('#rsBar'),lo=el.querySelector('#rsLo'),hi=el.querySelector('#rsHi'),ban=el.querySelector('#rsBanner'),fl=el.querySelector('.flash');
+  const show=v=>{const g=tierProg(v);if(badge.textContent!==g.t)setBadge(badge,g.t);bar.style.width=(g.p*100).toFixed(1)+'%';
+    const idx=TIERS.indexOf(g.t);lo.textContent=g.t;hi.textContent=idx>0?'Next: '+TIERS[idx-1]+' under '+g.lo:'Top level';big.textContent=v.toFixed(1)};
+  show(rk.before);
+  const start=reduce?0:1500,dur=reduce?0:1700;
+  setTimeout(()=>{const s0=performance.now();let lastT=rk.tb;
+    const step=t=>{const k=dur?Math.min(1,(t-s0)/dur):1,e=k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2,v=rk.before+(rk.after-rk.before)*e;show(v);
+      const tt=tier(v);if(tt!==lastT){const up=TIERS.indexOf(tt)<TIERS.indexOf(lastT);lastT=tt;tierFx(up)}
+      if(k<1)requestAnimationFrame(step);else el.querySelector('#rsDelta').style.opacity='1'};
+    requestAnimationFrame(step)},start);
+  function tierFx(up){
+    badge.classList.remove('pop','crack');void badge.offsetWidth;badge.classList.add(up?'pop':'crack');
+    ban.className='banner '+(up?'promo':'demo');ban.textContent=up?'PROMOTED!':'DEMOTED';void ban.offsetWidth;ban.classList.add('go');
+    fl.style.background=up?'radial-gradient(circle,rgba(242,193,78,.55),transparent 70%)':'radial-gradient(circle,rgba(255,60,40,.45),transparent 70%)';fl.classList.remove('go');void fl.offsetWidth;fl.classList.add('go');
+    if(up&&!reduce){const cols=['#f2c14e','#5fd39a','#6fb1e8','#ff7a6e','#ffffff'];let h='';for(let i=0;i<60;i++)h+=`<i class="cf" style="left:${Math.random()*100}%;background:${cols[i%5]};animation-duration:${1.6+Math.random()*1.8}s;animation-delay:${Math.random()*.5}s"></i>`;el.insertAdjacentHTML('beforeend',h)}
+    if(navigator.vibrate)try{navigator.vibrate(up?[30,40,60]:[80])}catch(e){}
+  }
+}
 /* ---------- end-of-game summary ---------- */
+function quickGrade(r){
+  // Fast 0-ply GNU grade for a move whose deep grade hasn't arrived yet.
+  if(r._q)return r._q;
+  try{const ranked=BG.rankPlays(r.pos,r.dice[0],r.dice[1]).ranked;const k=BG.key(applySteps(r.pos,r.steps));
+    const ch=ranked.find(x=>BG.key(x.pos)===k)||ranked[ranked.length-1];const loss=Math.max(0,ranked[0].score-ch.score);const g=BG.grade(loss);
+    Object.defineProperty(r,'_q',{value:{loss,grade:g.label,tone:g.tone,best:BG.notation(ranked[0].steps)},enumerable:false});return r._q}catch(e){return null}
+}
 function showSummary(){
   const sm=summarize({id:S.gameId,startedAt:S.startedAt,record:S.record,result:S.over});
   const isA=r=>r.assisted!=null?r.assisted:!!r.hinted;
   const mine=S.record.map((r,i)=>({r,i})).filter(x=>x.r.who==='me'&&!x.r.auto);
-  const graded=mine.filter(x=>x.r.grade&&!x.r.forced&&!isA(x.r));
-  // "no move" turns (dancing on the bar) are never graded, so they must not count as pending.
-  let pending=mine.filter(x=>!x.r.grade&&!x.r.forced&&x.r.steps&&x.r.steps.length).length;
-  if(pending&&!S.sumTimer)S.sumTimer=setTimeout(()=>{S.sumForce=true;if(S.phase==='over'&&!R)showSummary()},20000);
-  if(S.sumForce)pending=0;
+  // "no move" turns (dancing on the bar) are never graded, so they don't count.
+  const pendingRecs=mine.filter(x=>!x.r.grade&&!x.r.forced&&x.r.steps&&x.r.steps.length&&!isA(x.r));
+  const pending=pendingRecs.length;
+  const eff=[...mine.filter(x=>x.r.grade&&!x.r.forced&&!isA(x.r)).map(x=>({i:x.i,r:x.r,loss:x.r.loss,grade:x.r.grade,tone:x.r.tone,best:x.r.best,played:(x.r.firstTry||{}).played||x.r.played,quick:false})),
+    ...pendingRecs.map(x=>{const q=quickGrade(x.r);return q?{i:x.i,r:x.r,loss:q.loss,grade:q.grade,tone:q.tone,best:q.best,played:x.r.played,quick:true}:null}).filter(Boolean)];
   const forced=mine.filter(x=>x.r.forced).length;
-  const cnt=l=>graded.filter(x=>x.r.grade===l||(l==='Best'&&x.r.grade==='Best move')).length;
+  const cnt=l=>eff.filter(x=>x.grade===l||(l==='Best'&&x.grade==='Best move')).length;
   const prev=Object.values(summaries()).filter(x=>x.id!==S.gameId&&x.gnu&&x.pr!=null).sort((a,b)=>a.ts-b.ts).slice(-10);
   const avg=prev.length?prev.reduce((a,x)=>a+x.pr,0)/prev.length:null;
-  const pr=sm.pr;
+  const totalLoss=eff.reduce((a,x)=>a+x.loss,0);
+  const pr=eff.length?totalLoss/eff.length*500:null;
   const cmp=pr==null||avg==null?'':pr<avg-0.5?`better than your last ${prev.length}-game average (${avg.toFixed(1)})`:pr>avg+0.5?`worse than your last ${prev.length}-game average (${avg.toFixed(1)})`:`about your last ${prev.length}-game average (${avg.toFixed(1)})`;
-  const acc=graded.length?Math.round(100*graded.filter(x=>/^(Best|Best move|Good)$/.test(x.r.grade)).length/graded.length):null;
-  const worst=graded.filter(x=>x.r.loss>=0.02).sort((a,b)=>b.r.loss-a.r.loss).slice(0,3);
+  const acc=eff.length?Math.round(100*eff.filter(x=>/^(Best|Best move|Good)$/.test(x.grade)).length/eff.length):null;
+  const worst=eff.filter(x=>x.loss>=0.02).sort((a,b)=>b.loss-a.loss).slice(0,3);
   const tone=pr==null?'neutral':pr<7.5?'best':pr<12.5?'good':pr<22.5?'warn':'bad';
   const row=(l,t)=>`<div class="tile" style="padding:10px 6px;align-items:center"><span class="k">${l==='Inaccuracy'?'Inacc.':l}</span><span class="v tone-${t}">${cnt(l)}</span></div>`;
-  const totalLoss=graded.reduce((a,x)=>a+x.r.loss,0);
   const lvl=(S.record.find(r=>r.who==='opp'&&r.level)||{}).level||$('lvl').value;
   let rkHtml='',rkAnim=null;
-  if(!pending&&pr!=null){
+  if(pr!=null){
     if(!S.rank){S.rank=rankCalc(pr)||{none:true};if(!S.rank.none)rkAnim=S.rank}
-    if(!S.rank.none)rkHtml=rankBox(S.rank,!rkAnim);
-  }else if(pending)rkHtml='<div class="rankbox"><div class="k">Updating your 10-game PR when grading finishes…</div></div>';
+    else if(!S.rank.none&&!pending&&!S.rank.final){const f=rankCalc(pr);if(f){S.rank.after=f.after;S.rank.ta=f.ta}S.rank.final=true}
+    if(!S.rank.none)rkHtml=rankBox(S.rank,true);
+  }
   $('coach').innerHTML=`<h2>Game summary</h2>
    <div style="font-weight:700;margin-bottom:6px">${S.over||''}</div>
    <div class="verdict"><span class="chip ${tone}">PR ${pr==null?'–':pr.toFixed(1)}</span><span class="loss">${pr==null?'not enough graded moves':tier(pr)+' level'}${cmp?' · '+cmp:''}</span></div>
    <p style="color:var(--muted);font-size:.85rem;margin:6px 0 10px">PR = average equity lost per decision × 500, lower is better. ${acc!=null?`${acc}% of your moves were best or good. `:''}Opponent: ${LVL_NAME[lvl]||lvl}.</p>${rkHtml}
    <div class="tiles" style="grid-template-columns:repeat(5,minmax(0,1fr))">${row('Best','best')}${row('Good','good')}${row('Inaccuracy','warn')}${row('Mistake','bad')}${row('Blunder','bad')}</div>
-   <p style="color:var(--muted);font-size:.82rem;margin:8px 0">${graded.length} graded moves · equity lost ${totalLoss.toFixed(2)}${forced?` · ${forced} forced`:''}${sm.helped?` · ${sm.helped} with help (not counted)`:''}${sm.retried?` · ${sm.retried} stopped and retried (first try counted)`:''}${pending?` · grading ${pending} more…`:''}</p>
-   ${worst.length?`<div style="font-weight:700;margin:10px 0 4px">Costliest moves</div><div style="display:flex;flex-direction:column;gap:4px">${worst.map(x=>`<button class="logbtn" data-rec="${x.i}"><span class="n">${x.r.dice.join('-')}</span> You: <span class="n">${(x.r.firstTry||{}).played||x.r.played}</span> · <span class="tone-${x.r.tone}">${x.r.grade}</span> (−${x.r.loss.toFixed(3)}, best ${x.r.best})</button>`).join('')}</div><p style="color:var(--muted);font-size:.8rem;margin-top:6px">Tap one to see it on the board.</p>`:'<p>No costly moves this game.</p>'}`;
-  if(rkAnim)animateRank(rkAnim);
+   <p style="color:var(--muted);font-size:.82rem;margin:8px 0">${eff.length} graded moves · equity lost ${totalLoss.toFixed(2)}${forced?` · ${forced} forced`:''}${sm.helped?` · ${sm.helped} with help (not counted)`:''}${sm.retried?` · ${sm.retried} stopped and retried (first try counted)`:''}${pending?` · ${pending} quick-graded, refining in the background (numbers may shift slightly)`:''}</p>
+   ${worst.length?`<div style="font-weight:700;margin:10px 0 4px">Costliest moves</div><div style="display:flex;flex-direction:column;gap:4px">${worst.map(x=>`<button class="logbtn" data-rec="${x.i}"><span class="n">${x.r.dice.join('-')}</span> You: <span class="n">${x.played}</span> · <span class="tone-${x.tone}">${x.grade}</span> (−${x.loss.toFixed(3)}, best ${x.best})</button>`).join('')}</div><p style="color:var(--muted);font-size:.8rem;margin-top:6px">Tap one to see it on the board.</p>`:'<p>No costly moves this game.</p>'}`;
+  if(!S.rsShown&&pr!=null){S.rsShown=true;
+    const ov=S.over||'';const won=/You win/.test(ov);
+    resultScreen({win:won,title:won?'Victory':/resigned/.test(ov)?'Resigned':'Defeat',tag:/backgammon/.test(ov)?'Backgammon ×3':/gammon/.test(ov)?'Gammon ×2':'',
+      gamePr:pr,acc,blunders:cnt('Blunder'),rk:S.rank&&!S.rank.none?S.rank:null});
+  }
 }
 function newGame(){if(deepJob)deepJob.cancelled=true;if(typeof hideDash==='function')hideDash();if(R)closeReview();S=freshState();$('coach').innerHTML='<h2>Coach</h2><div class="empty">After each of your moves, the coach grades it against every legal play for that roll and explains what the best play does better.</div>';render()}
 
@@ -2012,7 +2111,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.30';
+const APP_VERSION='v1.32';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
