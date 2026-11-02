@@ -1719,7 +1719,10 @@ function showSummary(){
   const isA=r=>r.assisted!=null?r.assisted:!!r.hinted;
   const mine=S.record.map((r,i)=>({r,i})).filter(x=>x.r.who==='me'&&!x.r.auto);
   const graded=mine.filter(x=>x.r.grade&&!x.r.forced&&!isA(x.r));
-  const pending=mine.filter(x=>!x.r.grade&&!x.r.forced).length;
+  // "no move" turns (dancing on the bar) are never graded, so they must not count as pending.
+  let pending=mine.filter(x=>!x.r.grade&&!x.r.forced&&x.r.steps&&x.r.steps.length).length;
+  if(pending&&!S.sumTimer)S.sumTimer=setTimeout(()=>{S.sumForce=true;if(S.phase==='over'&&!R)showSummary()},20000);
+  if(S.sumForce)pending=0;
   const forced=mine.filter(x=>x.r.forced).length;
   const cnt=l=>graded.filter(x=>x.r.grade===l||(l==='Best'&&x.r.grade==='Best move')).length;
   const prev=Object.values(summaries()).filter(x=>x.id!==S.gameId&&x.gnu&&x.pr!=null).sort((a,b)=>a.ts-b.ts).slice(-10);
@@ -2009,7 +2012,7 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.29';
+const APP_VERSION='v1.30';
 $('ver').textContent=APP_VERSION;
 function start(data){
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
