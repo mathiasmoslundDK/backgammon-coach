@@ -165,12 +165,14 @@ ol.log .n{font-family:var(--mono)}
 @keyframes rkDrop{0%{transform:translateY(-60px);opacity:0}60%{transform:translateY(8px);opacity:1}75%{transform:translateX(-6px)}85%{transform:translateX(6px)}100%{transform:none}}
 @keyframes rkRise{from{transform:translateY(4px)}to{transform:translateY(-6px)}}
 @keyframes rkFall{to{transform:translateY(110vh) rotate(720deg)}}
+.bk{appearance:none;border:0;background:none;font:inherit;font-size:.7rem;font-weight:700;padding:2px 6px;border-radius:999px;cursor:pointer;vertical-align:middle;font-family:var(--body,inherit)}
+.bk.ok{color:var(--good)}.bk.warn{color:#fff;background:var(--bad)}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
 
 <div class="wrap">
   <header>
-    <h1>Backgammon Coach <span class="ver" id="ver"></span></h1>
+    <h1>Backgammon Coach <span class="ver" id="ver"></span> <button class="bk" id="bk" type="button"></button></h1>
     <div class="hdr-ctl">
       <label for="lvl" class="note">Opponent</label>
       <select id="lvl"><option value="beginner">1 · Beginner (PR ~40)</option><option value="intermediate">2 · Intermediate (PR ~18)</option><option value="advanced">3 · Advanced (PR ~10)</option><option value="expert">4 · Expert (PR ~5)</option><option value="worldclass">5 · World class (full GNU)</option></select>
@@ -230,7 +232,8 @@ ol.log .n{font-family:var(--mono)}
       <div id="syncForm" hidden style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <label for="ghToken" class="note">Fine-grained token for backgammon-games</label>
         <input id="ghToken" type="password" autocomplete="off" placeholder="github_pat_…" style="flex:1;min-width:0;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)">
-        <button class="btn small primary" id="ghSave">Save</button><button class="btn small" id="ghTest">Test</button><button class="btn small" id="ghRemove">Remove</button>
+        <button class="btn small primary" id="ghSave">Save</button><button class="btn small" id="ghTest">Test</button><button class="btn small" id="ghRemove">Remove</button><button class="btn small" id="ghLink">Link another device</button>
+        <div class="note" style="flex-basis:100%">Link another device copies a private link with your token in it. Open it once on the other phone, iPad or laptop and that device backs up too. Don't share the link with anyone.</div>
       </div>
     </div>
     <textarea id="copyArea" hidden readonly style="width:100%;height:90px;font-family:var(--mono);font-size:.7rem;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px"></textarea>
@@ -1721,16 +1724,31 @@ function endGame(won){
 }
 /* ---------- rank change after a game ---------- */
 const TIERS=['World champion','World class','Expert','Advanced','Intermediate','Casual','Beginner','Learning'];
+// Rating: a smoothed PR (each game moves it 10% of the way toward that game's PR, ~ last 20 games),
+// shown as divisions (Casual III → II → I). Promotion when the rating reaches the next division;
+// demotion only once it falls 40% of a division past the bottom edge, so it doesn't flip-flop.
+const RALPHA=0.1,RMARGIN=0.4;
+const DIVS=(()=>{const T=[['World champion',0,2.5],['World class',2.5,5],['Expert',5,7.5],['Advanced',7.5,12.5],['Intermediate',12.5,17.5],['Casual',17.5,22.5],['Beginner',22.5,30],['Learning',30,45]];
+  const D=[];for(const [n,lo,hi] of T){if(n==='World champion'){D.push({n,t:n,lo,hi});continue}const w=(hi-lo)/3;
+    D.push({n:n+' I',t:n,lo,hi:lo+w},{n:n+' II',t:n,lo:lo+w,hi:lo+2*w},{n:n+' III',t:n,lo:lo+2*w,hi:n==='Learning'?999:hi})}return D})();
+const divIdx=v=>{const k=DIVS.findIndex(d=>v>=d.lo&&v<d.hi);return k<0?DIVS.length-1:k};
+function ratingTrack(prs){
+  if(!prs.length)return null;const seedN=Math.min(5,prs.length);
+  let r=prs.slice(0,seedN).reduce((a,b)=>a+b,0)/seedN,cur=divIdx(r);
+  for(let i=seedN;i<prs.length;i++){r+=RALPHA*(prs[i]-r);const d=DIVS[cur],w=Math.min(d.hi,45)-d.lo;
+    if(r<d.lo||r>=d.hi+w*RMARGIN)cur=divIdx(r)}
+  return {r,div:cur};
+}
+function ratingGames(){return Object.values(summaries()).filter(x=>x.gnu&&x.pr!=null&&x.moves>0).sort((a,b)=>a.ts-b.ts)}
 function rankCalc(curPr){
-  const prior=Object.values(summaries()).filter(x=>x.id!==S.gameId&&x.gnu&&x.pr!=null).sort((a,b)=>a.ts-b.ts);
+  const prior=ratingGames().filter(x=>x.id!==S.gameId).map(x=>x.pr);
   if(prior.length<3)return null;
-  const avg=a=>a.reduce((s,x)=>s+x,0)/a.length;
-  const before=avg(prior.slice(-10).map(x=>x.pr)), after=avg([...prior.slice(-9).map(x=>x.pr),curPr]);
-  return {before,after,tb:tier(before),ta:tier(after)};
+  const b=ratingTrack(prior),a=ratingTrack([...prior,curPr]);
+  return {before:b.r,after:a.r,bi:b.div,ai:a.div,tb:DIVS[b.div].n,ta:DIVS[a.div].n};
 }
 function rankBox(rk,final){
   const d=rk.after-rk.before, better=d<0;
-  return `<div class="rankbox"><div><div class="k">Your PR, last 10 games</div><div class="num" id="rkNum">${(final?rk.after:rk.before).toFixed(1)}</div></div>
+  return `<div class="rankbox"><div><div class="k">Rating (smoothed PR)</div><div class="num" id="rkNum">${(final?rk.after:rk.before).toFixed(1)}</div></div>
    <div class="tier"><div class="delta ${better?'up':'down'}" id="rkDelta" style="${final?'':'opacity:0'}">${Math.abs(d)<0.05?'±0.0':(better?'▼ ':'▲ ')+Math.abs(d).toFixed(1)}${Math.abs(d)<0.05?'':better?' better':' worse'}</div><div id="rkTier">${final?rk.ta:rk.tb}</div></div></div>`;
 }
 function animateRank(rk){
@@ -1753,8 +1771,8 @@ function rankFx(rk){
 }
 const TBANDS={'World champion':[0,2.5],'World class':[2.5,5],'Expert':[5,7.5],'Advanced':[7.5,12.5],'Intermediate':[12.5,17.5],'Casual':[17.5,22.5],'Beginner':[22.5,30],'Learning':[30,45]};
 const TCOL={'World champion':['#f5d67a','#b8860b','#fff1b8'],'World class':['#d9e6f2','#6f8aa8','#e8f1fa'],'Expert':['#c78bd9','#5b2c73','#e6b8f5'],'Advanced':['#6fb1e8','#1f4f80','#a8d4f7'],'Intermediate':['#6fd1a0','#1f6b48','#a8f0cc'],'Casual':['#e0b070','#7a4f1c','#f2d0a0'],'Beginner':['#b0a090','#4f4438','#d6cbbd'],'Learning':['#9a8f86','#3d3630','#c4bab1']};
-function tierProg(v){const t=tier(v),[lo,hi]=TBANDS[t];return {t,p:Math.max(0,Math.min(1,(hi-v)/(hi-lo))),lo,hi}}
-function setBadge(el,t){const c=TCOL[t]||TCOL.Learning;el.style.setProperty('--bc1',c[0]);el.style.setProperty('--bc2',c[1]);el.style.setProperty('--bc3',c[2]);el.textContent=t}
+function divProg(k,v){const d=DIVS[k],hi=Math.min(d.hi,45);return Math.max(0,Math.min(1,(hi-v)/(hi-d.lo)))}
+function setBadge(el,k){const d=DIVS[k],t=d.n;const c=TCOL[d.t]||TCOL.Learning;el.style.setProperty('--bc1',c[0]);el.style.setProperty('--bc2',c[1]);el.style.setProperty('--bc3',c[2]);el.textContent=t}
 function resultScreen(o){
   // o: {title, tag, win, gamePr, acc, blunders, rk}
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1769,7 +1787,7 @@ function resultScreen(o){
       <div class="st" style="animation-delay:.65s"><div class="k">Blunders</div><div class="v">${o.blunders}</div></div>
     </div>
     ${rk?`<div class="rank" style="animation-delay:.9s;margin-top:54px"><div class="badge" id="rsBadge"></div>
-      <div class="lbl">PR · last 10 games</div><div class="big" id="rsBig">${rk.before.toFixed(1)}</div>
+      <div class="lbl">Rating · smoothed PR</div><div class="big" id="rsBig">${rk.before.toFixed(1)}</div>
       <div class="delta ${rk.after<rk.before?'up':'down'}" id="rsDelta">${Math.abs(rk.after-rk.before)<0.05?'±0.0':(rk.after<rk.before?'▼ ':'▲ ')+Math.abs(rk.after-rk.before).toFixed(1)+(rk.after<rk.before?' better':' worse')}</div>
       <div class="bar"><i id="rsBar"></i></div><div class="ends"><span id="rsLo"></span><span id="rsHi"></span></div></div>`:
       `<div class="lbl" style="margin-top:8px">Play ${3} games to unlock your rank</div>`}
@@ -1783,18 +1801,19 @@ function resultScreen(o){
   const cu=t=>{const k=reduce?1:Math.min(1,(t-t0-400)/900);if(k<0){requestAnimationFrame(cu);return}prEl.textContent=o.gamePr==null?'–':(o.gamePr*(1-Math.pow(1-k,3))).toFixed(1);if(k<1)requestAnimationFrame(cu)};requestAnimationFrame(cu);
   if(!rk)return;
   const badge=el.querySelector('#rsBadge'),big=el.querySelector('#rsBig'),bar=el.querySelector('#rsBar'),lo=el.querySelector('#rsLo'),hi=el.querySelector('#rsHi'),ban=el.querySelector('#rsBanner'),fl=el.querySelector('.flash');
-  const show=v=>{const g=tierProg(v);if(badge.textContent!==g.t)setBadge(badge,g.t);bar.style.width=(g.p*100).toFixed(1)+'%';
-    const idx=TIERS.indexOf(g.t);lo.textContent=g.t;hi.textContent=idx>0?'Next: '+TIERS[idx-1]+' under '+g.lo:'Top level';big.textContent=v.toFixed(1)};
-  show(rk.before);
+  let shownK=-1;
+  const show=(v,k)=>{if(k!==shownK){setBadge(badge,k);shownK=k;lo.textContent=DIVS[k].n;hi.textContent=k>0?'Next: '+DIVS[k-1].n+' under '+DIVS[k].lo.toFixed(1):'Top level'}
+    bar.style.width=(divProg(k,v)*100).toFixed(1)+'%';big.textContent=v.toFixed(1)};
+  show(rk.before,rk.bi);
   const start=reduce?0:1500,dur=reduce?0:1700;
   setTimeout(()=>{const s0=performance.now();let lastT=rk.tb;
-    const step=t=>{const k=dur?Math.min(1,(t-s0)/dur):1,e=k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2,v=rk.before+(rk.after-rk.before)*e;show(v);
-      const tt=tier(v);if(tt!==lastT){const up=TIERS.indexOf(tt)<TIERS.indexOf(lastT);lastT=tt;tierFx(up)}
-      if(k<1)requestAnimationFrame(step);else el.querySelector('#rsDelta').style.opacity='1'};
+    const step=t=>{const k=dur?Math.min(1,(t-s0)/dur):1,e=k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2,v=rk.before+(rk.after-rk.before)*e;
+      if(k<1){show(v,rk.bi);requestAnimationFrame(step)}
+      else{show(v,rk.ai);el.querySelector('#rsDelta').style.opacity='1';if(rk.ai!==rk.bi)tierFx(rk.ai<rk.bi)}};
     requestAnimationFrame(step)},start);
   function tierFx(up){
     badge.classList.remove('pop','crack');void badge.offsetWidth;badge.classList.add(up?'pop':'crack');
-    ban.className='banner '+(up?'promo':'demo');ban.textContent=up?'PROMOTED!':'DEMOTED';void ban.offsetWidth;ban.classList.add('go');
+    ban.className='banner '+(up?'promo':'demo');ban.textContent=up?(DIVS[rk.ai].t!==DIVS[rk.bi].t?'NEW RANK!':'PROMOTED!'):'DEMOTED';void ban.offsetWidth;ban.classList.add('go');
     fl.style.background=up?'radial-gradient(circle,rgba(242,193,78,.55),transparent 70%)':'radial-gradient(circle,rgba(255,60,40,.45),transparent 70%)';fl.classList.remove('go');void fl.offsetWidth;fl.classList.add('go');
     if(up&&!reduce){const cols=['#f2c14e','#5fd39a','#6fb1e8','#ff7a6e','#ffffff'];let h='';for(let i=0;i<60;i++)h+=`<i class="cf" style="left:${Math.random()*100}%;background:${cols[i%5]};animation-duration:${1.6+Math.random()*1.8}s;animation-delay:${Math.random()*.5}s"></i>`;el.insertAdjacentHTML('beforeend',h)}
     if(navigator.vibrate)try{navigator.vibrate(up?[30,40,60]:[80])}catch(e){}
@@ -1970,7 +1989,8 @@ function persist(){
     const arr=JSON.parse(localStorage.getItem('bgc-archive')||'[]');
     const j=arr.findIndex(g=>g.id===doc.id); const slim={...doc}; delete slim.log;
     if(j>=0){slim.copied=arr[j].copied&&arr[j].updatedAt===slim.updatedAt;slim.sha=arr[j].sha;slim.synced=false;arr[j]=slim}else{slim.synced=false;arr.push(slim)}
-    while(arr.length>60)arr.shift();
+    while(arr.length>60){const k=arr.findIndex(g=>g.synced);if(k<0||arr.length>200&&k<0)break;arr.splice(k,1)}
+    while(arr.length>200)arr.shift();
     localStorage.setItem('bgc-archive',JSON.stringify(arr));
   }catch(e){}
   saveSummary(summarize(doc));
@@ -1979,11 +1999,13 @@ function persist(){
 /* ---------- GitHub sync (home-screen app): finished games go to the private backgammon-games repo ---------- */
 const GH_REPO='mathiasmoslundDK/backgammon-games';
 const ghToken=()=>{try{return localStorage.getItem('bgc-gh-token')||''}catch(e){return ''}};
-let syncing=false;
+let syncing=false,syncErr=false;
 let noteAt=0;
-function syncNote(t,force){const n=$('syncNote');if(!n)return;if(t){n.textContent=t;noteAt=Date.now();return}
+function bkBadge(){const b=$('bk');if(!b)return;const pend=archive().filter(g=>!g.synced&&g.result).length;
+  if(!ghToken()){b.className='bk warn';b.textContent='⚠ Not backed up'}else if(syncErr){b.className='bk warn';b.textContent='⚠ Backup error'}else if(pend){b.className='bk warn';b.textContent=`⚠ ${pend} to upload`}else{b.className='bk ok';b.textContent='☁ Backed up'}}
+function syncNote(t,force){bkBadge();const n=$('syncNote');if(!n)return;if(t){n.textContent=t;noteAt=Date.now();return}
   if(!force&&Date.now()-noteAt<20000)return;
-  const pend=archive().filter(g=>!g.synced).length;n.textContent=ghToken()?'Token …'+ghToken().slice(-4)+' · '+(pend?`${pend} game${pend>1?'s':''} waiting to upload`:'All games uploaded'):'Off: games stay on this phone'}
+  const pend=archive().filter(g=>!g.synced).length;n.textContent=ghToken()?'Token …'+ghToken().slice(-4)+' · '+(pend?`${pend} game${pend>1?'s':''} waiting to upload`:'All games uploaded'):'Off: games stay on this device only'}
 const b64=str=>btoa(unescape(encodeURIComponent(str)));
 async function ghPut(g){
   const url=`https://api.github.com/repos/${GH_REPO}/contents/games/${g.id}.json`;
@@ -2000,8 +2022,8 @@ async function syncGames(force){
   const arr=archive();const todo=arr.filter(g=>!g.synced&&(g.result||force));
   if(!todo.length)return syncNote();
   syncing=true;syncNote('Uploading…');
-  try{for(const g of todo){await ghPut(g);g.synced=true;try{localStorage.setItem('bgc-archive',JSON.stringify(arr))}catch(e){}}syncNote(null,true)}
-  catch(e){syncNote(/401/.test(e.message)?'Token not accepted: paste a new one':/403|404/.test(e.message)?'Token can\'t write: on GitHub set this token\'s Contents permission to Read and write':'Upload failed, will retry: '+e.message)}
+  try{for(const g of todo){await ghPut(g);g.synced=true;try{localStorage.setItem('bgc-archive',JSON.stringify(arr))}catch(e){}}syncErr=false;syncNote(null,true)}
+  catch(e){syncErr=true;syncNote(/401/.test(e.message)?'Token not accepted: paste a new one':/403|404/.test(e.message)?'Token can\'t write: on GitHub set this token\'s Contents permission to Read and write':'Upload failed, will retry: '+e.message)}
   finally{syncing=false}
 }
 $('syncSetup').onclick=()=>{$('syncForm').hidden=!$('syncForm').hidden};
@@ -2015,6 +2037,7 @@ async function ghTest(){
   syncNote('Testing…');
   try{
     const u=await fetch('https://api.github.com/user',{headers:hdr});
+    syncErr=true;
     if(u.status===401)return syncNote('✗ GitHub doesn\'t accept this token (wrong, expired or deleted). Make a new one and paste it.');
     const r=await fetch(`https://api.github.com/repos/${GH_REPO}`,{headers:hdr});
     if(!r.ok)return syncNote('✗ Token works, but it can\'t see backgammon-games. Edit the token: Repository access → select backgammon-games.');
@@ -2022,12 +2045,25 @@ async function ghTest(){
     let sha;const g=await fetch(url,{headers:hdr});if(g.ok)sha=(await g.json()).sha;
     const w=await fetch(url,{method:'PUT',headers:{...hdr,'Content-Type':'application/json'},body:JSON.stringify({message:'Connection test',content:b64(JSON.stringify({tested:new Date().toISOString(),app:APP_VERSION})),...(sha?{sha}:{})})});
     if(!w.ok)return syncNote(`✗ Token can read but not write (GitHub said ${w.status}). Edit the token: Repository permissions → Contents → Read and write.`);
-    syncNote('✓ Connected. Uploading games…');setTimeout(()=>syncGames(true),800);
+    syncErr=false;syncNote('✓ Connected. Uploading games…');setTimeout(()=>syncGames(true),800);
   }catch(e){syncNote('✗ Could not reach GitHub: '+e.message)}
 }
 $('ghTest').onclick=ghTest;
+const APP_URL='https://mathiasmoslunddk.github.io/backgammon-coach/';
+$('ghLink').onclick=async()=>{const t=ghToken();if(!t)return syncNote('Save a token first, then link devices');
+  const link=APP_URL+'#sync='+encodeURIComponent(t);
+  try{if(navigator.share){await navigator.share({title:'Backgammon Coach',url:link});return syncNote('Link shared. Open it once on the other device.')}}catch(e){if(e&&e.name==='AbortError')return}
+  try{await navigator.clipboard.writeText(link);syncNote('✓ Link copied. Open it once on the other device (it stays private).')}catch(e){$('copyArea').hidden=false;$('copyArea').value=link;syncNote('Copy the link below and open it on the other device.')}};
+$('bk').onclick=()=>{if(typeof hideDash==='function')hideDash();$('syncBox').hidden=false;if(!ghToken())$('syncForm').hidden=false;$('syncBox').scrollIntoView({behavior:'smooth',block:'center'});syncNote(null,true);if(ghToken())syncGames(true)};
+// A device opened through a "Link another device" link picks up the token and starts backing up.
+function importSyncLink(){const m=location.hash.match(/[#&]sync=([^&]+)/);if(!m)return;
+  try{localStorage.setItem('bgc-gh-token',decodeURIComponent(m[1]))}catch(e){}
+  try{history.replaceState(null,'',location.pathname+location.search)}catch(e){location.hash=''}
+  setTimeout(()=>{$('syncBox').hidden=false;ghTest()},1200)}
+importSyncLink();window.addEventListener('hashchange',importSyncLink);
 $('ghRemove').onclick=()=>{try{localStorage.removeItem('bgc-gh-token')}catch(e){}$('syncForm').hidden=true;syncNote(null,true)};
 window.addEventListener('online',()=>syncGames());
+setInterval(()=>{if(document.visibilityState==='visible')syncGames()},120000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')syncGames(true)});
 /* ---------- stats dashboard ---------- */
 const LV2_SINCE=1793545026366;
@@ -2074,18 +2110,19 @@ async function showDash(){
   const fin=all.filter(x=>x.outcome),w=fin.filter(x=>x.outcome==='W').length,l=fin.length-w;
   const g=all.filter(x=>x.gnu&&x.pr!=null),last=g.slice(-10);
   const avg=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:null;
+  const rt=g.length>=3?ratingTrack(g.map(x=>x.pr)):null;
   const pr10=avg(last.map(x=>x.pr)),bl=avg(g.map(x=>x.blunders)),pts=fin.reduce((s,x)=>s+x.pts,0);
   $('dTiles').innerHTML=`
    <div class="tile"><span class="k">Games played</span><span class="v">${all.length}</span><span class="s">${fin.length} finished</span></div>
    <div class="tile"><span class="k">Won · lost</span><span class="v">${w} · ${l}</span><span class="s">${fin.length?Math.round(100*w/fin.length)+'% wins · '+(pts>0?'+':'')+pts+' points':'no finished games'}</span></div>
-   <div class="tile"><span class="k">Your PR, last 10</span><span class="v">${pr10==null?'–':pr10.toFixed(1)}</span><span class="s">${tier(pr10)}${pr10!=null?' · lower is better':''}</span></div>
+   <div class="tile"><span class="k">Rating</span><span class="v">${rt?rt.r.toFixed(1):'–'}</span><span class="s">${rt?DIVS[rt.div].n+' · last 10 avg '+(pr10==null?'–':pr10.toFixed(1)):'lower is better'}</span></div>
    <div class="tile"><span class="k">Blunders per game</span><span class="v">${bl==null?'–':bl.toFixed(1)}</span><span class="s">${(()=>{const h=g.reduce((a,x)=>a+(x.helped||0),0);return h?h+' hinted move'+(h>1?'s':'')+' left out':'GNU-graded games'})()}</span></div>`;
   drawPR(g);
   const T=[['World champion',0,2.5],['World class',2.5,5],['Expert',5,7.5],['Advanced',7.5,12.5],['Intermediate',12.5,17.5],['Casual',17.5,22.5],['Beginner',22.5,30],['Learning',30,null]];
-  const yi=pr10==null?-1:T.findIndex(([,a,b])=>b==null||pr10<b);
+  const yi=rt==null?-1:T.findIndex(([n])=>n===DIVS[rt.div].t);
   const nextT=yi>0?T[yi-1]:null;
-  $('dLadder').innerHTML='<div class="ladder">'+T.map(([n,a,b],i)=>`<div class="row${i===yi?' you':''}"><span>${n}${i===yi?' · you':''}</span><span>${b==null?a+'+':(a===0?'under '+b:a+' – '+b)}</span></div>`).join('')+'</div>'+
-    (nextT?`<div class="goal">Next: <b>${nextT[0]}</b> needs a PR under ${nextT[2]}. You're ${(pr10-nextT[2]).toFixed(1)} away (average of your last 10 games).</div>`:pr10==null?'<div class="goal note">Play a game to see where you stand.</div>':'');
+  $('dLadder').innerHTML='<div class="ladder">'+T.map(([n,a,b],i)=>`<div class="row${i===yi?' you':''}"><span>${n}${i===yi?' · you ('+DIVS[rt.div].n.replace(n,'').trim()+')':''}</span><span>${b==null?a+'+':(a===0?'under '+b:a+' – '+b)}</span></div>`).join('')+'</div>'+
+    (rt&&rt.div>0?`<div class="goal">Next: <b>${DIVS[rt.div-1].n}</b> at a rating under ${DIVS[rt.div].lo.toFixed(1)}. You're ${(rt.r-DIVS[rt.div].lo).toFixed(1)} away. Each division is a third of a level; each game moves your rating 10% of the way toward that game's PR.</div>`:rt?'':'<div class="goal note">Play 3 games to get a rating.</div>');
   const fmt=d=>{const x=new Date(d);if(isNaN(x))return '';const p=n=>String(n).padStart(2,'0');return `${x.getDate()} ${x.toLocaleDateString(undefined,{month:'short'})} ${p(x.getHours())}:${p(x.getMinutes())}`};
   const rows=all.slice().reverse().map(x=>`<tr><td>${fmt(x.date)}</td><td>${LVL_SHORT[x.level]||'–'}</td>
     <td>${x.outcome?`<span class="res ${x.outcome==='W'?'w':'l'}">${x.outcome}${Math.abs(x.pts)>1?' ×'+Math.abs(x.pts):''}</span>${x.resigned?' res.':''}`:'<span class="res o">–</span>'}</td>
@@ -2111,10 +2148,12 @@ function drawPR(g){
 }
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.32';
+const APP_VERSION='v1.33';
 $('ver').textContent=APP_VERSION;
 function start(data){
-  getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; $('syncBox').hidden=false; updateCopyNote(); syncNote(); setTimeout(()=>syncGames(),1500); } });
+  $('syncBox').hidden=false; syncNote(null,true); setTimeout(()=>syncGames(true),1500);
+  if(ghToken())setTimeout(()=>loadSummaries().catch(()=>{}),3000);
+  getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; updateCopyNote(); } });
   let saved=null; try{saved=JSON.parse(localStorage.getItem('bgc-current')||'null')}catch(e){}
   const src=(data&&data.S&&data.S.pos)?data.S:(saved&&saved.pos?saved:null);
   if(src){S=src;if(S.phase==='ai'){S.phase='roll'}
