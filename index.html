@@ -30,6 +30,8 @@
   --accent:#c7564d; --accent-ink:#1a0e0c; --gold:#ddb256;
   --best:#5cbf85; --good:#93c16a; --warn:#e0a640; --bad:#e2685f; color-scheme:dark}
 [hidden]{display:none!important}
+.gv,.col-board,.col-side,.dv{display:flex;flex-direction:column;gap:12px;min-width:0}
+
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
 .wrap{max-width:620px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 40px;display:flex;flex-direction:column;gap:12px}
 header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
@@ -173,6 +175,24 @@ ol.log .n{font-family:var(--mono)}
 .bk{appearance:none;border:0;background:none;font:inherit;font-size:.7rem;font-weight:700;padding:2px 6px;border-radius:999px;cursor:pointer;vertical-align:middle;font-family:var(--body,inherit)}
 .bk.ok{color:var(--good)}.bk.warn{color:#fff;background:var(--bad)}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+/* Computer: board on the left (sized to the window, stays in view), everything else in a column on the right. */
+@media (min-width:980px){
+  .wrap{max-width:1280px;padding-inline:24px;padding-block:18px 32px}
+  .gv{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,400px);gap:20px;align-items:start}
+  .col-board{position:sticky;top:12px}
+  .board-wrap{max-width:calc((100vh - 310px) * 1.125);min-width:420px;margin-inline:auto;width:100%}
+  .col-board .win,.col-board .bar,.col-board .controls,.col-board .stoprow,.col-board #resignBox{max-width:calc((100vh - 310px) * 1.125);min-width:420px;margin-inline:auto;width:100%;box-sizing:border-box}
+  .col-side{max-height:calc(100vh - 110px);overflow-y:auto;padding-right:4px;position:sticky;top:12px;scrollbar-width:thin}
+  .dv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+  .dv>#lbCard,.dv>#pgCard,.dv>#dTiles{grid-column:1 / -1}
+  h1{font-size:1.9rem}
+  .dv>#dTiles{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .col-side .note{font-size:.8rem}
+}
+@media (min-width:1500px){.gv{grid-template-columns:minmax(0,1fr) 440px}}
+/* Inside the Cascalia CMS: follow its light look and drop the page's own title (the CMS shows it). */
+html.cms{--bg:#f6f4ef;--surface:#ffffff;--line:#e4e0d8}
+html.cms h1{font-size:1.15rem}
 </style>
 
 <div class="wrap">
@@ -186,7 +206,8 @@ ol.log .n{font-family:var(--mono)}
       <button class="btn small" id="newBtn">New game</button>
     </div>
   </header>
-  <div id="gameView" style="display:flex;flex-direction:column;gap:12px">
+  <div id="gameView" class="gv">
+  <div class="col-board">
 
   <div class="win" id="win" aria-live="polite">
     <div class="win-row"><span>You <b id="wMe">50%</b></span><span class="note">Winning chances</span><span>Opponent <b id="wOpp">50%</b></span></div>
@@ -216,6 +237,8 @@ ol.log .n{font-family:var(--mono)}
   <div class="stoprow"><label for="stopSel" class="note">Stop on mistakes</label>
     <select id="stopSel"><option value="off">Off</option><option value="inaccuracy">Inaccuracy or worse</option><option value="mistake">Mistake or worse</option><option value="blunder">Blunders only</option></select></div>
 
+  </div>
+  <div class="col-side">
   <div class="review" id="review" hidden>
     <div class="rv-head"><b id="rvTitle"></b><button class="btn small" id="rvBack">Back to game</button></div>
     <div class="tabs" id="rvTabs"></div>
@@ -246,7 +269,8 @@ ol.log .n{font-family:var(--mono)}
     <div class="note">You play ivory, moving from your 24-point toward your home board at the bottom right. Tap a checker, then tap where it goes; tapping a far point plays both dice with one checker. Home-screen app: works with no internet. Games are kept on this phone (last 60). Tap "Copy games for Claude" and paste them into a chat to get them analysed. <span id="engineNote">Loading GNU Backgammon…</span></div>
   </section>
   </div>
-  <div id="dashView" hidden style="display:flex;flex-direction:column;gap:12px">
+  </div>
+  <div id="dashView" class="dv" hidden>
     <section class="card" id="lbCard" hidden><h2>Leaderboard</h2><div id="lbBoard"></div><h3 style="font-size:.9rem;margin:14px 0 6px">Latest games</h3><div id="lbRecent"></div></section>
     <section class="card" id="pgCard" hidden><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h2 id="pgTitle" style="margin:0"></h2><button class="btn small" id="pgClose">Close</button></div><div id="pgTiles" class="tiles" style="margin-top:10px"></div><div style="overflow-x:auto;margin-top:10px"><table class="gtable" id="pgTable"></table></div></section>
     <div class="tiles" id="dTiles"></div>
@@ -1202,6 +1226,7 @@ const $=id=>document.getElementById(id);
 // Inside the Cascalia CMS (page served at /backgammon with BG_ME = the signed-in player): games are saved to the
 // CMS database instead of GitHub, every player's browser storage is kept apart, and Stats gains the leaderboard.
 const CMS=!!window.BG_ME;
+if(CMS){document.documentElement.classList.add('cms');document.documentElement.dataset.theme='light'}
 const LS=CMS?(()=>{const P='bgc:'+window.BG_ME.email+':';return{getItem:k=>localStorage.getItem(P+k),setItem:(k,v)=>localStorage.setItem(P+k,v),removeItem:k=>localStorage.removeItem(P+k)}})():localStorage;
 const escH=x=>String(x==null?'':x).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const NS='http://www.w3.org/2000/svg';
@@ -2187,7 +2212,7 @@ async function lbLoad(){
     <div class="note">Ranked by rating (smoothed PR, lower is better). Tap a player to see all their games, tap a game to go through it move by move.</div>`;
   $('lbBoard').querySelectorAll('tr.click').forEach(tr=>tr.onclick=e=>{if(e.target.dataset.best)return;showPlayer(tr.dataset.p)});
   $('lbBoard').querySelectorAll('a[data-best]').forEach(a=>a.onclick=e=>{e.preventDefault();viewGame(a.dataset.bp,a.dataset.best)});
-  $('lbRecent').innerHTML=d.recent.length?'<div class="lb-feed">'+d.recent.map(g=>`<button data-p="${escH(g.player)}" data-g="${escH(g.id)}"><b>${escH(g.player===me?'You':g.name)}</b> ${g.outcome==='W'?'beat':'lost to'} ${escH(oppTxt(g))}${Math.abs(g.pts)>1?(Math.abs(g.pts)===3?' (backgammon)':' (gammon)'):''} · PR ${g.pr==null?'–':g.pr.toFixed(1)} · ${g.blunders} blunder${g.blunders===1?'':'s'} <span class="note" style="margin:0">· ${ago(g.date)}</span></button>`).join('')+'</div>':'<div class="note">No finished games yet.</div>';
+  $('lbRecent').innerHTML=d.recent.length?'<div class="lb-feed">'+d.recent.slice(0,8).map(g=>`<button data-p="${escH(g.player)}" data-g="${escH(g.id)}"><b>${escH(g.player===me?'You':g.name)}</b> ${g.outcome==='W'?'beat':'lost to'} ${escH(oppTxt(g))}${Math.abs(g.pts)>1?(Math.abs(g.pts)===3?' (backgammon)':' (gammon)'):''} · PR ${g.pr==null?'–':g.pr.toFixed(1)} · ${g.blunders} blunder${g.blunders===1?'':'s'} <span class="note" style="margin:0">· ${ago(g.date)}</span></button>`).join('')+'</div>':'<div class="note">No finished games yet.</div>';
   $('lbRecent').querySelectorAll('button').forEach(b=>b.onclick=()=>viewGame(b.dataset.p,b.dataset.g));
 }
 async function showPlayer(email){
@@ -2235,7 +2260,7 @@ function closeViewer(){VIEW=null;if(R)closeReview();$('coach').innerHTML=S.phase
 function alertNote(t){try{syncNote(t)}catch(e){}}
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.35';
+const APP_VERSION='v1.36';
 $('ver').textContent=APP_VERSION;
 function start(data){
   matchLabel(); setTimeout(matchLabel,4000);
