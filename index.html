@@ -2051,10 +2051,10 @@ function persist(){
 /* ---------- GitHub sync (home-screen app): finished games go to the private backgammon-games repo ---------- */
 const GH_REPO='mathiasmoslundDK/backgammon-games';
 const ghToken=()=>{if(CMS)return 'cms';try{return LS.getItem('bgc-gh-token')||''}catch(e){return ''}};
-let syncing=false,syncErr=false;
+let syncing=false,syncErr=false,syncErrText='';
 let noteAt=0;
 function bkBadge(){const b=$('bk');if(!b)return;const pend=archive().filter(g=>!g.synced&&g.result).length;
-  if(!ghToken()){b.className='bk warn';b.textContent='⚠ Not backed up'}else if(syncErr){b.className='bk warn';b.textContent='⚠ Backup error'}else if(pend){b.className='bk warn';b.textContent=`⚠ ${pend} to upload`}else{b.className='bk ok';b.textContent='☁ Backed up'}}
+  if(!ghToken()){b.className='bk warn';b.textContent='⚠ Not backed up'}else if(syncErr){b.className='bk warn';b.textContent='⚠ Backup error';b.title=syncErrText||''}else if(pend){b.className='bk warn';b.textContent=`⚠ ${pend} to upload`}else{b.className='bk ok';b.textContent='☁ Backed up'}}
 function syncNote(t,force){bkBadge();const n=$('syncNote');if(!n)return;if(t){n.textContent=t;noteAt=Date.now();return}
   if(!force&&Date.now()-noteAt<20000)return;
   const pend=archive().filter(g=>!g.synced).length;n.textContent=ghToken()?(CMS?'Cascalia CMS · ':'Token …'+ghToken().slice(-4)+' · ')+(pend?`${pend} game${pend>1?'s':''} waiting to upload`:'All games uploaded'):'Off: games stay on this device only'}
@@ -2065,7 +2065,7 @@ async function ghPut(g){
   const body=o=>JSON.stringify({message:`Game ${g.id}${g.result?': '+g.result:''}`,content:b64(JSON.stringify(o,null,1)),...(g.sha?{sha:g.sha}:{})});
   const clean={...g};delete clean.sha;delete clean.synced;delete clean.copied;
   if(CMS){const r=await fetch('/api/backgammon/games/'+encodeURIComponent(g.id),{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(clean)});
-    if(!r.ok)throw new Error('CMS said '+r.status);return}
+    if(!r.ok){let why='';try{why=(await r.json()).error||''}catch(e){}throw new Error('CMS said '+r.status+(why?' ('+why+')':''))}return}
   let r=await fetch(url,{method:'PUT',headers:hdr,body:body(clean)});
   if(r.status===409||r.status===422){const cur=await fetch(url,{headers:hdr});if(cur.ok){g.sha=(await cur.json()).sha;r=await fetch(url,{method:'PUT',headers:hdr,body:body(clean)})}}
   if(!r.ok)throw new Error('GitHub said '+r.status);
@@ -2077,7 +2077,7 @@ async function syncGames(force){
   if(!todo.length)return syncNote();
   syncing=true;syncNote('Uploading…');
   try{for(const g of todo){await ghPut(g);g.synced=true;try{LS.setItem('bgc-archive',JSON.stringify(arr))}catch(e){}}syncErr=false;syncNote(null,true)}
-  catch(e){syncErr=true;syncNote(CMS?(/40[13]/.test(e.message)?'Signed out of the CMS: sign in again, games wait on this device':'Upload to the CMS failed, will retry: '+e.message):/401/.test(e.message)?'Token not accepted: paste a new one':/403|404/.test(e.message)?'Token can\'t write: on GitHub set this token\'s Contents permission to Read and write':'Upload failed, will retry: '+e.message)}
+  catch(e){syncErr=true;syncErrText=e.message;syncNote(CMS?(/40[13]/.test(e.message)?'Signed out of the CMS: sign in again, games wait on this device':'Upload to the CMS failed, will retry: '+e.message):/401/.test(e.message)?'Token not accepted: paste a new one':/403|404/.test(e.message)?'Token can\'t write: on GitHub set this token\'s Contents permission to Read and write':'Upload failed, will retry: '+e.message)}
   finally{syncing=false}
 }
 $('syncSetup').onclick=()=>{$('syncForm').hidden=!$('syncForm').hidden};
