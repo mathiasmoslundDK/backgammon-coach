@@ -85,6 +85,14 @@ ol.log .n{font-family:var(--mono)}
 .gtable{width:100%;border-collapse:collapse;font-size:.8rem;font-variant-numeric:tabular-nums}
 .gtable th{text-align:left;font-weight:600;color:var(--muted);font-size:.72rem;padding:6px 4px;border-bottom:1px solid var(--line);white-space:nowrap}
 .gtable tr.click{cursor:pointer}.gtable tr.click:hover td{background:var(--surface,rgba(0,0,0,.03))}
+.prctl{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.prctl .chip2{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 11px;font:inherit;font-size:.8rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.prctl .chip2 i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.prctl .chip2.off{opacity:.45;text-decoration:line-through}
+.prctl .seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;margin-left:auto}
+.prctl .seg button{appearance:none;border:0;background:var(--surface);color:var(--muted);font:inherit;font-size:.78rem;font-weight:600;padding:5px 10px;cursor:pointer}
+.prctl .seg button.on{background:var(--ink);color:var(--surface)}
+.prctl .sep{width:1px;height:20px;background:var(--line);margin:0 2px}
 .lb-name{font-weight:700}.lb-live{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2e9d6a;margin-left:6px;box-shadow:0 0 0 3px rgba(46,157,106,.2);vertical-align:middle}
 .lb-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.72rem;font-weight:700;color:#fff;background:var(--bc2,#6f6150)}
 .lb-feed{display:flex;flex-direction:column;gap:4px}.lb-feed button{appearance:none;border:1px solid var(--line);background:none;border-radius:10px;padding:8px 10px;text-align:left;font:inherit;font-size:.82rem;color:inherit;cursor:pointer}
@@ -184,7 +192,7 @@ ol.log .n{font-family:var(--mono)}
   .col-board .win,.col-board .bar,.col-board .controls,.col-board .stoprow,.col-board #resignBox{max-width:calc((100vh - 310px) * 1.125);min-width:420px;margin-inline:auto;width:100%;box-sizing:border-box}
   .col-side{max-height:calc(100vh - 110px);overflow-y:auto;padding-right:4px;position:sticky;top:12px;scrollbar-width:thin}
   .dv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
-  .dv>#lbCard,.dv>#pgCard,.dv>#dTiles{grid-column:1 / -1}
+  .dv>#lbCard,.dv>#pgCard,.dv>#dTiles,.dv>#prCard{grid-column:1 / -1}
   h1{font-size:1.9rem}
   .dv>#dTiles{grid-template-columns:repeat(4,minmax(0,1fr))}
   .col-side .note{font-size:.8rem}
@@ -275,7 +283,7 @@ html.cms h1{font-size:1.15rem}
     <section class="card" id="pgCard" hidden><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h2 id="pgTitle" style="margin:0"></h2><button class="btn small" id="pgClose">Close</button></div><div id="pgTiles" class="tiles" style="margin-top:10px"></div><div style="overflow-x:auto;margin-top:10px"><table class="gtable" id="pgTable"></table></div></section>
     <div class="tiles" id="dTiles"></div>
     <section class="card"><h2>Levels</h2><div id="dLadder"></div></section>
-    <section class="card"><h2>Your PR over time</h2><div class="note">PR is the equity you lose per move, times 500. Lower is better. The line is your 5-game average.</div><svg id="dChart" viewBox="0 0 340 200" style="width:100%;height:auto;display:block" role="img" aria-label="PR per game"></svg><div class="legend" id="dLegend"></div></section>
+    <section class="card" id="prCard"><h2 id="prTitle">Your PR over time</h2><div class="prctl" id="prCtl" hidden></div><div class="note" id="prNote">PR is the equity you lose per move, times 500. Lower is better. The line is your 5-game average.</div><svg id="dChart" viewBox="0 0 340 200" style="width:100%;height:auto;display:block" role="img" aria-label="PR per game"></svg><div class="legend" id="dLegend"></div></section>
     <section class="card"><h2>Games</h2><div style="overflow-x:auto"><table class="gtable" id="dTable"></table></div><div class="note" id="dNote"></div></section>
   </div>
 </div>
@@ -2165,7 +2173,7 @@ async function showDash(){
    <div class="tile"><span class="k">Won · lost</span><span class="v">${w} · ${l}</span><span class="s">${fin.length?Math.round(100*w/fin.length)+'% wins · '+(pts>0?'+':'')+pts+' points':'no finished games'}</span></div>
    <div class="tile"><span class="k">Rating</span><span class="v">${rt?rt.r.toFixed(1):'–'}</span><span class="s">${rt?DIVS[rt.div].n+' · last 10 avg '+(pr10==null?'–':pr10.toFixed(1)):'lower is better'}</span></div>
    <div class="tile"><span class="k">Blunders per game</span><span class="v">${bl==null?'–':bl.toFixed(1)}</span><span class="s">${(()=>{const h=g.reduce((a,x)=>a+(x.helped||0),0);return h?h+' hinted move'+(h>1?'s':'')+' left out':'GNU-graded games'})()}</span></div>`;
-  drawPR(g);
+  drawPR(g);if(CMS)loadPRAll();
   const T=[['World champion',0,2.5],['World class',2.5,5],['Expert',5,7.5],['Advanced',7.5,12.5],['Intermediate',12.5,17.5],['Casual',17.5,22.5],['Beginner',22.5,30],['Learning',30,null]];
   const yi=rt==null?-1:T.findIndex(([n])=>n===DIVS[rt.div].t);
   const nextT=yi>0?T[yi-1]:null;
@@ -2178,6 +2186,52 @@ async function showDash(){
   if(CMS)setTimeout(()=>{lbLoad();document.querySelectorAll('#dTable tr.click').forEach(tr=>tr.onclick=()=>viewGame(window.BG_ME.email,tr.dataset.gid))},0);
   $('dTable').innerHTML=`<thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>PR</th><th>Blun.</th><th>Help</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No games yet. Play one and it appears here.</td></tr>'}</tbody>`;
   $('dNote').textContent='W/L ×2 = gammon, ×3 = backgammon, – = unfinished. Help = moves played after a hint · moves retried after a stop. Hinted moves are left out of PR; for retried moves PR uses your first try. '+(all.some(x=>!x.gnu)?'* Graded by the old built-in coach, before GNU; not comparable. ':'')+'PR here counts checker play only (no doubling cube), so it reads a bit lower than eXtreme Gammon\'s PR.';
+}
+/* ---------- CMS: everyone's PR in one chart ---------- */
+const PCOL=['#8e2f2a','#2f6db5','#2f7a4f','#b27716','#6b3fa0','#0f8a8a'];
+const prPref=()=>{try{return Object.assign({hide:[],bubbles:true,axis:'game'},JSON.parse(LS.getItem('bgc-prchart')||'{}'))}catch(e){return {hide:[],bubbles:true,axis:'game'}}};
+const prSave=p=>{try{LS.setItem('bgc-prchart',JSON.stringify(p))}catch(e){}};
+let PRDATA=null;
+async function loadPRAll(){
+  try{const r=await fetch('/api/backgammon/leaderboard',{credentials:'same-origin'});if(!r.ok)return;const lb=await r.json();
+    const me=lb.me;const order=[me,...lb.board.map(p=>p.email).filter(e=>e!==me)];
+    const series=[];
+    for(const [i,email] of order.entries()){const p=lb.board.find(x=>x.email===email);if(!p)continue;
+      const g=await (await fetch('/api/backgammon/games?player='+encodeURIComponent(email),{credentials:'same-origin'})).json();
+      series.push({email,name:email===me?'You':p.name,color:PCOL[i%PCOL.length],games:g.games.filter(x=>x.gnu&&x.pr!=null&&x.moves>0).sort((a,b)=>a.ts-b.ts)})}
+    PRDATA=series;drawPRAll()}catch(e){}
+}
+function drawPRAll(){
+  const series=PRDATA;if(!series)return;const pref=prPref();
+  $('prTitle').textContent='PR over time · everyone';$('prNote').textContent='PR is the equity lost per move, times 500. Lower is better. Each line is a player\'s 5-game average; filled dots are wins, rings are losses. Tap a name to hide or show that player.';$('prCtl').hidden=false;
+  $('prCtl').innerHTML=series.map(s=>`<button class="chip2${pref.hide.includes(s.email)?' off':''}" data-e="${escH(s.email)}"><i style="background:${s.color}"></i>${escH(s.name)} <span class="note" style="margin:0">${s.games.length}</span></button>`).join('')+
+    `<span class="sep"></span><button class="chip2${pref.bubbles?'':' off'}" data-b="1">● Bubbles</button>`+
+    `<span class="seg"><button data-ax="game" class="${pref.axis==='game'?'on':''}">By game #</button><button data-ax="date" class="${pref.axis==='date'?'on':''}">By date</button></span>`;
+  $('prCtl').querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{const p=prPref();const e=b.dataset.e;p.hide=p.hide.includes(e)?p.hide.filter(x=>x!==e):[...p.hide,e];prSave(p);drawPRAll()});
+  $('prCtl').querySelector('[data-b]').onclick=()=>{const p=prPref();p.bubbles=!p.bubbles;prSave(p);drawPRAll()};
+  $('prCtl').querySelectorAll('[data-ax]').forEach(b=>b.onclick=()=>{const p=prPref();p.axis=b.dataset.ax;prSave(p);drawPRAll()});
+  const vis=series.filter(s=>!pref.hide.includes(s.email)&&s.games.length);
+  const svg=$('dChart');const W=680,H=280,L=34,R=92,T=12,B=26;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.innerHTML='';
+  const mk=(t,a,txt)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(txt!=null)e.textContent=txt;svg.appendChild(e);return e};
+  if(!vis.length){mk('text',{x:W/2,y:H/2,'text-anchor':'middle','font-size':13,style:'fill:var(--muted)'},'Turn on a player to see their PR');$('dLegend').innerHTML='';return}
+  const all=vis.flatMap(s=>s.games);const max=Math.max(30,Math.ceil(Math.max(...all.map(x=>x.pr))/5)*5);
+  const byDate=pref.axis==='date',n=Math.max(...vis.map(s=>s.games.length));
+  const t0=Math.min(...all.map(x=>x.ts)),t1=Math.max(...all.map(x=>x.ts));
+  const X=(i,x)=>byDate?(t1===t0?(L+W-R)/2:L+(x.ts-t0)/(t1-t0)*(W-L-R)):(n<=1?(L+W-R)/2:L+i*(W-L-R)/(n-1));
+  const Y=v=>T+(H-T-B)*(Math.min(v,max)/max);
+  for(const [v,name] of [[5,'World class'],[7.5,'Expert'],[12.5,'Advanced'],[17.5,'Intermediate'],[22.5,'Casual'],[30,'Beginner']]){if(v>max)continue;
+    mk('line',{x1:L,x2:W-R,y1:Y(v),y2:Y(v),style:'stroke:var(--line)','stroke-dasharray':'3 4'});
+    mk('text',{x:W-R+6,y:Y(v)+3,'font-size':9.5,style:'fill:var(--muted)'},name+' <'+v)}
+  for(let v=0;v<=max;v+=10)mk('text',{x:L-5,y:Y(v)+3,'text-anchor':'end','font-size':10,style:'fill:var(--muted)'},v);
+  const lab=byDate?[dayFmt(new Date(t0).toISOString()).replace(/ \d\d:\d\d$/,''),dayFmt(new Date(t1).toISOString()).replace(/ \d\d:\d\d$/,'')]:['game 1','game '+n];
+  mk('text',{x:L,y:H-7,'font-size':10,style:'fill:var(--muted)'},lab[0]);mk('text',{x:W-R,y:H-7,'text-anchor':'end','font-size':10,style:'fill:var(--muted)'},lab[1]);
+  for(const s of vis){const g=s.games;
+    if(pref.bubbles)g.forEach((x,i)=>{const c=mk('circle',{cx:X(i,x),cy:Y(x.pr),r:4.2,style:x.outcome==='W'?`fill:${s.color};stroke:var(--surface)`:x.outcome==='L'?`fill:var(--surface);stroke:${s.color}`:`fill:var(--muted);stroke:var(--surface)`,'stroke-width':x.outcome==='L'?1.8:1,opacity:.85});
+      const t=document.createElementNS(NS,'title');t.textContent=`${s.name} · ${dayFmt(x.date)} · PR ${x.pr.toFixed(1)} · ${x.outcome==='W'?'won':x.outcome==='L'?'lost':'unfinished'} vs ${oppTxt(x)}`;c.appendChild(t)});
+    if(g.length>1){const roll=g.map((x,i)=>{const a=g.slice(Math.max(0,i-4),i+1);return a.reduce((t,y)=>t+y.pr,0)/a.length});
+      mk('polyline',{points:roll.map((v,i)=>`${X(i,g[i])},${Y(v)}`).join(' '),fill:'none',style:`stroke:${s.color}`,'stroke-width':2.6,'stroke-linejoin':'round','stroke-linecap':'round'})}
+    else mk('circle',{cx:X(0,g[0]),cy:Y(g[0].pr),r:5,style:`fill:${s.color}`})}
+  $('dLegend').innerHTML=(pref.bubbles?'<span><span class="sw" style="background:var(--ink);height:8px;width:8px;border-radius:50%"></span> won</span><span><span class="sw" style="background:transparent;border:1.8px solid var(--ink);height:6px;width:6px;border-radius:50%"></span> lost</span>':'')+'<span><span class="sw" style="background:var(--ink)"></span> 5-game average per player</span>'+(byDate?'':'<span class="note" style="margin:0">By game #: each player\'s 1st, 2nd, 3rd … game lined up</span>');
 }
 function drawPR(g){
   const svg=$('dChart');svg.innerHTML='';const W=340,H=200,L=30,R=8,T=10,B=24;
@@ -2260,7 +2314,7 @@ function closeViewer(){VIEW=null;if(R)closeReview();$('coach').innerHTML=S.phase
 function alertNote(t){try{syncNote(t)}catch(e){}}
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.36';
+const APP_VERSION='v1.37';
 $('ver').textContent=APP_VERSION;
 function start(data){
   matchLabel(); setTimeout(matchLabel,4000);
