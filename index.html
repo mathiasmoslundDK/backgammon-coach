@@ -82,6 +82,11 @@ ol.log .n{font-family:var(--mono)}
 .tile .k{font-size:.78rem;color:var(--muted)}.tile .v{font-family:var(--display);font-size:1.6rem;font-variant-numeric:tabular-nums}.tile .s{font-size:.78rem;color:var(--muted)}
 .gtable{width:100%;border-collapse:collapse;font-size:.8rem;font-variant-numeric:tabular-nums}
 .gtable th{text-align:left;font-weight:600;color:var(--muted);font-size:.72rem;padding:6px 4px;border-bottom:1px solid var(--line);white-space:nowrap}
+.gtable tr.click{cursor:pointer}.gtable tr.click:hover td{background:var(--surface,rgba(0,0,0,.03))}
+.lb-name{font-weight:700}.lb-live{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2e9d6a;margin-left:6px;box-shadow:0 0 0 3px rgba(46,157,106,.2);vertical-align:middle}
+.lb-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.72rem;font-weight:700;color:#fff;background:var(--bc2,#6f6150)}
+.lb-feed{display:flex;flex-direction:column;gap:4px}.lb-feed button{appearance:none;border:1px solid var(--line);background:none;border-radius:10px;padding:8px 10px;text-align:left;font:inherit;font-size:.82rem;color:inherit;cursor:pointer}
+.mv-list{display:flex;flex-direction:column;gap:3px;max-height:420px;overflow:auto;margin-top:8px}.mv-list .opp{font-size:.78rem;color:var(--muted);padding:2px 6px}
 .gtable td{padding:7px 4px;border-bottom:1px solid var(--line);white-space:nowrap}
 .res{display:inline-block;min-width:22px;text-align:center;border-radius:6px;padding:1px 6px;font-weight:700;font-size:.74rem;color:#fff}
 .res.w{background:var(--best)}.res.l{background:var(--bad)}.res.o{background:var(--muted)}
@@ -242,6 +247,8 @@ ol.log .n{font-family:var(--mono)}
   </section>
   </div>
   <div id="dashView" hidden style="display:flex;flex-direction:column;gap:12px">
+    <section class="card" id="lbCard" hidden><h2>Leaderboard</h2><div id="lbBoard"></div><h3 style="font-size:.9rem;margin:14px 0 6px">Latest games</h3><div id="lbRecent"></div></section>
+    <section class="card" id="pgCard" hidden><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h2 id="pgTitle" style="margin:0"></h2><button class="btn small" id="pgClose">Close</button></div><div id="pgTiles" class="tiles" style="margin-top:10px"></div><div style="overflow-x:auto;margin-top:10px"><table class="gtable" id="pgTable"></table></div></section>
     <div class="tiles" id="dTiles"></div>
     <section class="card"><h2>Levels</h2><div id="dLadder"></div></section>
     <section class="card"><h2>Your PR over time</h2><div class="note">PR is the equity you lose per move, times 500. Lower is better. The line is your 5-game average.</div><svg id="dChart" viewBox="0 0 340 200" style="width:100%;height:auto;display:block" role="img" aria-label="PR per game"></svg><div class="legend" id="dLegend"></div></section>
@@ -1192,6 +1199,11 @@ window.GNU_DATA={w:"H4sICL3s3moCA3dlaWdodHMuYmluACSbeVQP3//H23ct2rVLSaS9UO+5dyLZ
 (function(){
 const svg=document.getElementById('board');
 const $=id=>document.getElementById(id);
+// Inside the Cascalia CMS (page served at /backgammon with BG_ME = the signed-in player): games are saved to the
+// CMS database instead of GitHub, every player's browser storage is kept apart, and Stats gains the leaderboard.
+const CMS=!!window.BG_ME;
+const LS=CMS?(()=>{const P='bgc:'+window.BG_ME.email+':';return{getItem:k=>localStorage.getItem(P+k),setItem:(k,v)=>localStorage.setItem(P+k,v),removeItem:k=>localStorage.removeItem(P+k)}})():localStorage;
+const escH=x=>String(x==null?'':x).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const NS='http://www.w3.org/2000/svg';
 const TOP=14,BOT=306,MID=160,PH=125;
 
@@ -1199,8 +1211,8 @@ let S=null;
 function freshState(){return{pos:BG.initPos(),phase:'start',dice:null,rem:[],hist:[],M:0,firstHi:false,ranked:null,startPos:null,sel:null,
   ai:{dice:null,text:'',marks:[]},log:[],record:[],winHist:[0.5],gameId:'g'+Date.now(),startedAt:new Date().toISOString(),turnNo:0,hinted:false,coach:null,over:null,openRoll:null}}
 let stats={moves:0,best:0,errors:0,loss:0};
-try{const s=JSON.parse(localStorage.getItem('bgc-stats')||'null');if(s)stats=s}catch(e){}
-function saveStats(){try{localStorage.setItem('bgc-stats',JSON.stringify(stats))}catch(e){}}
+try{const s=JSON.parse(LS.getItem('bgc-stats')||'null');if(s)stats=s}catch(e){}
+function saveStats(){try{LS.setItem('bgc-stats',JSON.stringify(stats))}catch(e){}}
 
 /* ---------- geometry ---------- */
 function col(i){ // returns x of left edge and whether top row
@@ -1489,7 +1501,7 @@ $('hintBtn').onclick=()=>{if(S.phase!=='move')return;S.hinted=true;const db=(BG.
   render()};
 $('newBtn').onclick=()=>newGame();
 $('stopSel').value=stopLevel();
-$('stopSel').onchange=e=>{try{localStorage.setItem('bgc-stop',e.target.value)}catch(_){}};
+$('stopSel').onchange=e=>{try{LS.setItem('bgc-stop',e.target.value)}catch(_){}};
 const RES=['','a single game','a gammon','a backgammon'];
 function resignLevel(){const o=BG.onRoll?BG.onRoll(S.pos):null;if(!o)return 1;return o.lbg>0.5?3:o.lg>0.5?2:1}
 $('resignBtn').onclick=()=>{if(!(S.phase==='roll'||S.phase==='move'))return;S.resignLv=resignLevel();
@@ -1503,10 +1515,10 @@ $('resignYes').onclick=()=>{if(!(S.phase==='roll'||S.phase==='move'))return;
 // Noise calibrated Nov 2026 by self-play against 0-ply GNU: PR ≈ 40 / 18 / 10 / 5 / ~2.
 const LEVELS={match:{noise:0},beginner:{noise:0.088},intermediate:{noise:0.04},advanced:{noise:0.0254},expert:{noise:0.015},worldclass:{noise:0,deep:true}};
 let level='expert';
-try{level=localStorage.getItem('bgc-level')||'expert'}catch(e){}
+try{level=LS.getItem('bgc-level')||'expert'}catch(e){}
 level=({strong:'expert',casual:'intermediate'})[level]||level; if(!LEVELS[level])level='expert';
 $('lvl').value=level;
-$('lvl').onchange=e=>{level=e.target.value;try{localStorage.setItem('bgc-level',level)}catch(_){}};
+$('lvl').onchange=e=>{level=e.target.value;try{LS.setItem('bgc-level',level)}catch(_){}};
 
 function rnd(){const a=new Uint32Array(1);crypto.getRandomValues(a);return 1+(a[0]%6)}
 
@@ -1541,7 +1553,7 @@ function playerRoll(a,b){
   render();
 }
 /* ---------- stop on mistakes ---------- */
-function stopLevel(){try{return localStorage.getItem('bgc-stop')||'off'}catch(e){return 'off'}}
+function stopLevel(){try{return LS.getItem('bgc-stop')||'off'}catch(e){return 'off'}}
 function stopsOn(g,lv){return lv==='inaccuracy'?(g.tone==='warn'||g.tone==='bad'):lv==='mistake'?(g.label==='Mistake'||g.label==='Blunder'):lv==='blunder'?g.label==='Blunder':false}
 function finishPlayer(){
   const lv=stopLevel();
@@ -1903,13 +1915,13 @@ function openReviewFor(t,turn,opt){
   const isBest=mine===best;
   plays.push({id:'before',label:'Before'});
   if(!isBest) plays.push({id:'compare',label:'Compare'});
-  plays.push({id:'mine',label:isBest?'Your move (best)':'Your move',play:mine,color:'mine'});
+  plays.push({id:'mine',label:(opt.who?opt.who+'\'s move':'Your move')+(isBest?' (best)':''),play:mine,color:'mine'});
   if(!isBest) plays.push({id:'best',label:'Best',play:best,color:'best'});
   let n=2; for(const r of ranked){ if(r===mine||r===best) continue; if(n>3) break; plays.push({id:'alt'+n,label:'#'+n,play:r,color:'alt'}); n++; }
   if(coachSaved==null) coachSaved=$('coach').innerHTML;
   const wMine=BG.winProb(mine.pos), wBest=BG.winProb(best.pos);
   const loss=t.deep?t.deep.loss:Math.max(0,best.score-mine.score);
-  R={idx,t,ranked,mine,best,plays,tab:(plays.find(p=>p.id==='compare')||plays[1]||plays[0]).id,turn,g:BG.grade(loss),live:!!opt.live};
+  R={idx,t,ranked,mine,best,plays,tab:(plays.find(p=>p.id==='compare')||plays[1]||plays[0]).id,turn,g:BG.grade(loss),live:!!opt.live,who:opt.who||null};
   $('rvBack').textContent=opt.live?'Back to my move':'Back to game';
   const dw=n=>t.deep&&t.deep.plays.find(x=>x.n===n);
   const wM=(dw(t.played)||{}).win??wMine, wB=(dw(BG.notation(best.steps))||{}).win??wBest;
@@ -1951,7 +1963,7 @@ function renderReview(){
     drawArrows(tab.play.steps,tab.color,0);
   }
   const g=R.g||BG.grade(Math.max(0,best.score-mine.score));
-  $('rvTitle').textContent=`${R.live?'This move':'Your move '+R.turn} · rolled ${t.dice.join('-')} · ${g.label}`;
+  $('rvTitle').textContent=`${R.live?'This move':(R.who?R.who+'\'s move ':'Your move ')+R.turn} · rolled ${t.dice.join('-')} · ${g.label}`;
   const tabs=$('rvTabs'); tabs.innerHTML='';
   for(const p of plays){
     const b=document.createElement('button'); b.className='tab'; b.setAttribute('aria-pressed',String(p.id===tab.id));
@@ -1973,13 +1985,13 @@ function engineNote(){$('engineNote').textContent=BG.engine==='gnu'
   :'GNU Backgammon could not load in this browser, so the simpler built-in coach is grading your moves.'}
 window.addEventListener('gnu-ready',engineNote);
 BG.gnuLoaded.then(engineNote);
-function archive(){try{return JSON.parse(localStorage.getItem('bgc-archive')||'[]')}catch(e){return[]}}
+function archive(){try{return JSON.parse(LS.getItem('bgc-archive')||'[]')}catch(e){return[]}}
 function updateCopyNote(){const n=archive().filter(g=>!g.copied).length;$('copyNote').textContent=n?`${n} game${n>1?'s':''} not yet sent to Claude`:'All games sent'}
 $('copyGames').onclick=()=>{
   const arr=archive(); let todo=arr.filter(g=>!g.copied).slice(-10); if(!todo.length)todo=arr.slice(-1);
   const txt='BACKGAMMON GAMES '+JSON.stringify(todo.map(g=>({...g,record:g.record.map(r=>({w:r.who,d:r.dice,p:r.pos,s:r.steps.map(x=>[x.from,x.to,x.die,x.hit?1:0]),g:r.grade,l:r.loss,b:r.best,wn:r.win,a:r.auto?1:0}))})));
-  const done=()=>{for(const g of arr)if(todo.some(t=>t.id===g.id))g.copied=true;try{localStorage.setItem('bgc-archive',JSON.stringify(arr))}catch(e){};$('copyNote').textContent=`Copied ${todo.length} game${todo.length>1?'s':''}. Paste it in your chat with Claude.`};
-  const fallback=()=>{const a=$('copyArea');a.hidden=false;a.value=txt;a.focus();a.select();$('copyNote').textContent='Select all the text below and copy it.';for(const g of arr)if(todo.some(t=>t.id===g.id))g.copied=true;try{localStorage.setItem('bgc-archive',JSON.stringify(arr))}catch(e){}};
+  const done=()=>{for(const g of arr)if(todo.some(t=>t.id===g.id))g.copied=true;try{LS.setItem('bgc-archive',JSON.stringify(arr))}catch(e){};$('copyNote').textContent=`Copied ${todo.length} game${todo.length>1?'s':''}. Paste it in your chat with Claude.`};
+  const fallback=()=>{const a=$('copyArea');a.hidden=false;a.value=txt;a.focus();a.select();$('copyNote').textContent='Select all the text below and copy it.';for(const g of arr)if(todo.some(t=>t.id===g.id))g.copied=true;try{LS.setItem('bgc-archive',JSON.stringify(arr))}catch(e){}};
   try{navigator.clipboard.writeText(txt).then(done,fallback)}catch(e){fallback()}
 };
 document.addEventListener('click',e=>{const b=e.target.closest('[data-rec]');if(b){openReview(+b.dataset.rec)}});
@@ -1988,37 +2000,39 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-rec]');if(
 let dbP=null;
 function getDb(){ if(!dbP) dbP=(window.claude&&window.claude.use)?window.claude.use('db').catch(()=>null):Promise.resolve(null); return dbP }
 function persist(){
-  try{localStorage.setItem('bgc-current',JSON.stringify(S))}catch(e){}
+  try{LS.setItem('bgc-current',JSON.stringify(S))}catch(e){}
   const doc={id:S.gameId,startedAt:S.startedAt,updatedAt:new Date().toISOString(),result:S.over||null,
     note:'Positions are arrays of 28 from the mover\'s view: 1-24 points (+ mover, - opponent), 25 mover bar, 0 mover off, 26 opp bar, 27 opp off.',
     log:S.log.map(x=>x.replace(/<[^>]+>/g,'')),record:S.record,recovered:!!S.recovered};
   try{
-    const arr=JSON.parse(localStorage.getItem('bgc-archive')||'[]');
+    const arr=JSON.parse(LS.getItem('bgc-archive')||'[]');
     const j=arr.findIndex(g=>g.id===doc.id); const slim={...doc}; delete slim.log;
     if(j>=0){slim.copied=arr[j].copied&&arr[j].updatedAt===slim.updatedAt;slim.sha=arr[j].sha;slim.synced=false;arr[j]=slim}else{slim.synced=false;arr.push(slim)}
     while(arr.length>60){const k=arr.findIndex(g=>g.synced);if(k<0||arr.length>200&&k<0)break;arr.splice(k,1)}
     while(arr.length>200)arr.shift();
-    localStorage.setItem('bgc-archive',JSON.stringify(arr));
+    LS.setItem('bgc-archive',JSON.stringify(arr));
   }catch(e){}
   saveSummary(summarize(doc));
   getDb().then(db=>{ if(db) return db.doc('games/'+S.gameId).set(doc) }).catch(()=>{});
 }
 /* ---------- GitHub sync (home-screen app): finished games go to the private backgammon-games repo ---------- */
 const GH_REPO='mathiasmoslundDK/backgammon-games';
-const ghToken=()=>{try{return localStorage.getItem('bgc-gh-token')||''}catch(e){return ''}};
+const ghToken=()=>{if(CMS)return 'cms';try{return LS.getItem('bgc-gh-token')||''}catch(e){return ''}};
 let syncing=false,syncErr=false;
 let noteAt=0;
 function bkBadge(){const b=$('bk');if(!b)return;const pend=archive().filter(g=>!g.synced&&g.result).length;
   if(!ghToken()){b.className='bk warn';b.textContent='⚠ Not backed up'}else if(syncErr){b.className='bk warn';b.textContent='⚠ Backup error'}else if(pend){b.className='bk warn';b.textContent=`⚠ ${pend} to upload`}else{b.className='bk ok';b.textContent='☁ Backed up'}}
 function syncNote(t,force){bkBadge();const n=$('syncNote');if(!n)return;if(t){n.textContent=t;noteAt=Date.now();return}
   if(!force&&Date.now()-noteAt<20000)return;
-  const pend=archive().filter(g=>!g.synced).length;n.textContent=ghToken()?'Token …'+ghToken().slice(-4)+' · '+(pend?`${pend} game${pend>1?'s':''} waiting to upload`:'All games uploaded'):'Off: games stay on this device only'}
+  const pend=archive().filter(g=>!g.synced).length;n.textContent=ghToken()?(CMS?'Cascalia CMS · ':'Token …'+ghToken().slice(-4)+' · ')+(pend?`${pend} game${pend>1?'s':''} waiting to upload`:'All games uploaded'):'Off: games stay on this device only'}
 const b64=str=>btoa(unescape(encodeURIComponent(str)));
 async function ghPut(g){
   const url=`https://api.github.com/repos/${GH_REPO}/contents/games/${g.id}.json`;
   const hdr={Authorization:'Bearer '+ghToken(),Accept:'application/vnd.github+json','Content-Type':'application/json'};
   const body=o=>JSON.stringify({message:`Game ${g.id}${g.result?': '+g.result:''}`,content:b64(JSON.stringify(o,null,1)),...(g.sha?{sha:g.sha}:{})});
   const clean={...g};delete clean.sha;delete clean.synced;delete clean.copied;
+  if(CMS){const r=await fetch('/api/backgammon/games/'+encodeURIComponent(g.id),{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(clean)});
+    if(!r.ok)throw new Error('CMS said '+r.status);return}
   let r=await fetch(url,{method:'PUT',headers:hdr,body:body(clean)});
   if(r.status===409||r.status===422){const cur=await fetch(url,{headers:hdr});if(cur.ok){g.sha=(await cur.json()).sha;r=await fetch(url,{method:'PUT',headers:hdr,body:body(clean)})}}
   if(!r.ok)throw new Error('GitHub said '+r.status);
@@ -2029,15 +2043,16 @@ async function syncGames(force){
   const arr=archive();const todo=arr.filter(g=>!g.synced&&(g.result||force));
   if(!todo.length)return syncNote();
   syncing=true;syncNote('Uploading…');
-  try{for(const g of todo){await ghPut(g);g.synced=true;try{localStorage.setItem('bgc-archive',JSON.stringify(arr))}catch(e){}}syncErr=false;syncNote(null,true)}
-  catch(e){syncErr=true;syncNote(/401/.test(e.message)?'Token not accepted: paste a new one':/403|404/.test(e.message)?'Token can\'t write: on GitHub set this token\'s Contents permission to Read and write':'Upload failed, will retry: '+e.message)}
+  try{for(const g of todo){await ghPut(g);g.synced=true;try{LS.setItem('bgc-archive',JSON.stringify(arr))}catch(e){}}syncErr=false;syncNote(null,true)}
+  catch(e){syncErr=true;syncNote(CMS?(/40[13]/.test(e.message)?'Signed out of the CMS: sign in again, games wait on this device':'Upload to the CMS failed, will retry: '+e.message):/401/.test(e.message)?'Token not accepted: paste a new one':/403|404/.test(e.message)?'Token can\'t write: on GitHub set this token\'s Contents permission to Read and write':'Upload failed, will retry: '+e.message)}
   finally{syncing=false}
 }
 $('syncSetup').onclick=()=>{$('syncForm').hidden=!$('syncForm').hidden};
 $('ghSave').onclick=()=>{const t=$('ghToken').value.trim();if(!t){syncNote('Paste a token first');return}
-  try{localStorage.setItem('bgc-gh-token',t)}catch(e){}$('ghToken').value='';ghTest()};
+  try{LS.setItem('bgc-gh-token',t)}catch(e){}$('ghToken').value='';ghTest()};
 // Checks each step of the connection and says exactly which one fails.
 async function ghTest(){
+  if(CMS){try{const r=await fetch('/api/backgammon/me',{credentials:'same-origin'});if(!r.ok)throw new Error(r.status);syncErr=false;syncNote('✓ Connected to the CMS. Uploading games…');syncGames(true)}catch(e){syncErr=true;syncNote('Can\'t reach the CMS: '+e.message)}return}
   const t=ghToken();if(!t)return syncNote('No token saved yet: paste it and tap Save');
   if(!navigator.onLine)return syncNote('No internet right now');
   const hdr={Authorization:'Bearer '+t,Accept:'application/vnd.github+json'};
@@ -2064,11 +2079,11 @@ $('ghLink').onclick=async()=>{const t=ghToken();if(!t)return syncNote('Save a to
 $('bk').onclick=()=>{if(typeof hideDash==='function')hideDash();$('syncBox').hidden=false;if(!ghToken())$('syncForm').hidden=false;$('syncBox').scrollIntoView({behavior:'smooth',block:'center'});syncNote(null,true);if(ghToken())syncGames(true)};
 // A device opened through a "Link another device" link picks up the token and starts backing up.
 function importSyncLink(){const m=location.hash.match(/[#&]sync=([^&]+)/);if(!m)return;
-  try{localStorage.setItem('bgc-gh-token',decodeURIComponent(m[1]))}catch(e){}
+  try{LS.setItem('bgc-gh-token',decodeURIComponent(m[1]))}catch(e){}
   try{history.replaceState(null,'',location.pathname+location.search)}catch(e){location.hash=''}
   setTimeout(()=>{$('syncBox').hidden=false;ghTest()},1200)}
 importSyncLink();window.addEventListener('hashchange',importSyncLink);
-$('ghRemove').onclick=()=>{try{localStorage.removeItem('bgc-gh-token')}catch(e){}$('syncForm').hidden=true;syncNote(null,true)};
+$('ghRemove').onclick=()=>{try{LS.removeItem('bgc-gh-token')}catch(e){}$('syncForm').hidden=true;syncNote(null,true)};
 window.addEventListener('online',()=>syncGames());
 setInterval(()=>{if(document.visibilityState==='visible')syncGames()},120000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')syncGames(true)});
@@ -2093,20 +2108,21 @@ function summarize(d){
     moves:mine.length,pr:mine.length?loss/mine.length*500:null,blunders:mine.filter(r=>r.grade==='Blunder').length,mistakes:mine.filter(r=>r.grade==='Mistake').length,
     helped,retried,gnu:ts>=GNU_SINCE||!!d.regraded,deep:mine.some(r=>r.deep)};
 }
-function summaries(){try{return JSON.parse(localStorage.getItem('bgc-summ')||'{}')}catch(e){return {}}}
-function saveSummary(x){if(!x||!x.id)return;try{const m=summaries();m[x.id]=x;localStorage.setItem('bgc-summ',JSON.stringify(m))}catch(e){}}
+function summaries(){try{return JSON.parse(LS.getItem('bgc-summ')||'{}')}catch(e){return {}}}
+function saveSummary(x){if(!x||!x.id)return;try{const m=summaries();m[x.id]=x;LS.setItem('bgc-summ',JSON.stringify(m))}catch(e){}}
 async function loadSummaries(){
   const m=summaries();
   for(const g of archive()){const x=summarize(g);if(!m[x.id]||m[x.id].updatedAt<=x.updatedAt)m[x.id]=x}
   try{const db=await getDb();if(db){const snap=await db.collection('games').limit(500).get();for(const ds of snap.docs){const d=ds.data();if(!d)continue;const x=summarize(d);if(!m[x.id]||m[x.id].updatedAt<=x.updatedAt)m[x.id]=x}}}catch(e){}
-  try{if(ghToken()&&navigator.onLine){
+  if(CMS){try{const r=await fetch('/api/backgammon/games',{credentials:'same-origin'});if(r.ok){for(const x of (await r.json()).games){if(!m[x.id]||(m[x.id].updatedAt||'')<=(x.updatedAt||''))m[x.id]=x}}}catch(e){}}
+  try{if(!CMS&&ghToken()&&navigator.onLine){
     const hdr={Authorization:'Bearer '+ghToken(),Accept:'application/vnd.github+json'};
     const r=await fetch(`https://api.github.com/repos/${GH_REPO}/contents/games`,{headers:hdr});
     if(r.ok){for(const f of await r.json()){const id=f.name.replace(/\.json$/,'');if(!/^g\d+$/.test(id)||m[id])continue;
       const fr=await fetch(f.url,{headers:hdr});if(!fr.ok)continue;const j=await fr.json();
       const d=JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,'')))));m[id]=summarize(d)}}
   }}catch(e){}
-  try{localStorage.setItem('bgc-summ',JSON.stringify(m))}catch(e){}
+  try{LS.setItem('bgc-summ',JSON.stringify(m))}catch(e){}
   return Object.values(m).filter(x=>x.moves>0||x.outcome).sort((a,b)=>a.ts-b.ts);
 }
 function tier(pr){return pr==null?'':pr<2.5?'World champion':pr<5?'World class':pr<7.5?'Expert':pr<12.5?'Advanced':pr<17.5?'Intermediate':pr<22.5?'Casual':pr<30?'Beginner':'Learning'}
@@ -2131,9 +2147,10 @@ async function showDash(){
   $('dLadder').innerHTML='<div class="ladder">'+T.map(([n,a,b],i)=>`<div class="row${i===yi?' you':''}"><span>${n}${i===yi?' · you ('+DIVS[rt.div].n.replace(n,'').trim()+')':''}</span><span>${b==null?a+'+':(a===0?'under '+b:a+' – '+b)}</span></div>`).join('')+'</div>'+
     (rt&&rt.div>0?`<div class="goal">Next: <b>${DIVS[rt.div-1].n}</b> at a rating under ${DIVS[rt.div].lo.toFixed(1)}. You're ${(rt.r-DIVS[rt.div].lo).toFixed(1)} away. Each division is a third of a level; each game moves your rating 10% of the way toward that game's PR.</div>`:rt?'':'<div class="goal note">Play 3 games to get a rating.</div>');
   const fmt=d=>{const x=new Date(d);if(isNaN(x))return '';const p=n=>String(n).padStart(2,'0');return `${x.getDate()} ${x.toLocaleDateString(undefined,{month:'short'})} ${p(x.getHours())}:${p(x.getMinutes())}`};
-  const rows=all.slice().reverse().map(x=>`<tr><td>${fmt(x.date)}</td><td>${LVL_SHORT[x.level]||'–'}</td>
+  const rows=all.slice().reverse().map(x=>`<tr${CMS?` class="click" data-gid="${escH(x.id)}"`:''}><td>${fmt(x.date)}</td><td>${LVL_SHORT[x.level]||'–'}</td>
     <td>${x.outcome?`<span class="res ${x.outcome==='W'?'w':'l'}">${x.outcome}${Math.abs(x.pts)>1?' ×'+Math.abs(x.pts):''}</span>${x.resigned?' res.':''}`:'<span class="res o">–</span>'}</td>
     <td>${x.pr==null?'–':x.pr.toFixed(1)}${x.gnu?'':'*'}</td><td>${x.blunders}</td><td>${(x.helped||0)+(x.retried||0)?`${x.helped||0}·${x.retried||0}`:'–'}</td></tr>`).join('');
+  if(CMS)setTimeout(()=>{lbLoad();document.querySelectorAll('#dTable tr.click').forEach(tr=>tr.onclick=()=>viewGame(window.BG_ME.email,tr.dataset.gid))},0);
   $('dTable').innerHTML=`<thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>PR</th><th>Blun.</th><th>Help</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No games yet. Play one and it appears here.</td></tr>'}</tbody>`;
   $('dNote').textContent='W/L ×2 = gammon, ×3 = backgammon, – = unfinished. Help = moves played after a hint · moves retried after a stop. Hinted moves are left out of PR; for retried moves PR uses your first try. '+(all.some(x=>!x.gnu)?'* Graded by the old built-in coach, before GNU; not comparable. ':'')+'PR here counts checker play only (no doubling cube), so it reads a bit lower than eXtreme Gammon\'s PR.';
 }
@@ -2153,16 +2170,80 @@ function drawPR(g){
   g.forEach((x,i)=>mk('circle',{cx:X(i),cy:Y(Math.min(x.pr,max)),r:3.6,style:`fill:${x.outcome==='W'?'var(--best)':x.outcome==='L'?'var(--bad)':'var(--muted)'};stroke:var(--surface)`,'stroke-width':1}));
   $('dLegend').innerHTML='<span><span class="sw" style="background:var(--best);height:8px;width:8px;border-radius:50%"></span> won</span><span><span class="sw" style="background:var(--bad);height:8px;width:8px;border-radius:50%"></span> lost</span><span><span class="sw" style="background:var(--muted);height:8px;width:8px;border-radius:50%"></span> unfinished</span><span><span class="sw" style="background:var(--accent)"></span> 5-game average</span>';
 }
+/* ---------- CMS: leaderboard and other players' games ---------- */
+const ago=d=>{const t=(Date.now()-Date.parse(d))/60000;if(!(t>=0))return '';if(t<60)return Math.max(1,Math.round(t))+' min ago';if(t<1440)return Math.round(t/60)+' h ago';return Math.round(t/1440)+' d ago'};
+const dayFmt=d=>{const x=new Date(d);return isNaN(x)?'':x.getDate()+' '+x.toLocaleDateString(undefined,{month:'short'})+' '+String(x.getHours()).padStart(2,'0')+':'+String(x.getMinutes()).padStart(2,'0')};
+const resTxt=x=>x.outcome?`<span class="res ${x.outcome==='W'?'w':'l'}">${x.outcome}${Math.abs(x.pts)>1?' ×'+Math.abs(x.pts):''}</span>${x.resigned?' res.':''}`:'<span class="res o">–</span>';
+const oppTxt=x=>(x.level==='match'?'Matched level':LVL_NAME[x.level]||'–')+(x.level==='match'&&x.oppPr!=null?' ('+x.oppPr+')':'');
+async function lbLoad(){
+  if(!CMS)return;$('lbCard').hidden=false;
+  let d;try{const r=await fetch('/api/backgammon/leaderboard',{credentials:'same-origin'});if(!r.ok)throw new Error(r.status);d=await r.json()}catch(e){$('lbBoard').innerHTML='<div class="note">Leaderboard unavailable: '+escH(e.message)+'</div>';return}
+  const me=d.me;
+  $('lbBoard').innerHTML=`<div style="overflow-x:auto"><table class="gtable"><thead><tr><th>#</th><th>Player</th><th>Rank</th><th>Rating</th><th>W–L</th><th>Pts</th><th>Last 10</th><th>Best</th><th>Streak</th></tr></thead><tbody>${d.board.map((p,i)=>{
+    const c=TCOL[p.tier]||TCOL.Learning;
+    return `<tr class="click" data-p="${escH(p.email)}"><td>${p.rating==null?'–':i+1}</td><td><span class="lb-name">${escH(p.name)}${p.email===me?' (you)':''}</span>${p.playingNow?'<span class="lb-live" title="Playing now"></span>':''}<div class="note" style="margin:0">${p.lastAt?'played '+ago(p.lastAt):'no games yet'}</div></td>
+      <td>${p.division?`<span class="lb-badge" style="--bc2:${c[1]}">${escH(p.division)}</span>`:'–'}</td><td>${p.rating==null?'–':p.rating.toFixed(1)}</td><td>${p.wins}–${p.losses}</td><td>${p.points>0?'+':''}${p.points}</td>
+      <td>${p.last10==null?'–':p.last10.toFixed(1)}</td><td>${p.best?`<a href="#" data-best="${escH(p.best.id)}" data-bp="${escH(p.email)}">${p.best.pr.toFixed(1)}</a>`:'–'}</td><td>${p.streak?(p.streak.kind==='W'?'🔥 ':'')+p.streak.n+p.streak.kind:'–'}</td></tr>`}).join('')}</tbody></table></div>
+    <div class="note">Ranked by rating (smoothed PR, lower is better). Tap a player to see all their games, tap a game to go through it move by move.</div>`;
+  $('lbBoard').querySelectorAll('tr.click').forEach(tr=>tr.onclick=e=>{if(e.target.dataset.best)return;showPlayer(tr.dataset.p)});
+  $('lbBoard').querySelectorAll('a[data-best]').forEach(a=>a.onclick=e=>{e.preventDefault();viewGame(a.dataset.bp,a.dataset.best)});
+  $('lbRecent').innerHTML=d.recent.length?'<div class="lb-feed">'+d.recent.map(g=>`<button data-p="${escH(g.player)}" data-g="${escH(g.id)}"><b>${escH(g.player===me?'You':g.name)}</b> ${g.outcome==='W'?'beat':'lost to'} ${escH(oppTxt(g))}${Math.abs(g.pts)>1?(Math.abs(g.pts)===3?' (backgammon)':' (gammon)'):''} · PR ${g.pr==null?'–':g.pr.toFixed(1)} · ${g.blunders} blunder${g.blunders===1?'':'s'} <span class="note" style="margin:0">· ${ago(g.date)}</span></button>`).join('')+'</div>':'<div class="note">No finished games yet.</div>';
+  $('lbRecent').querySelectorAll('button').forEach(b=>b.onclick=()=>viewGame(b.dataset.p,b.dataset.g));
+}
+async function showPlayer(email){
+  let d;try{const r=await fetch('/api/backgammon/games?player='+encodeURIComponent(email),{credentials:'same-origin'});if(!r.ok)throw new Error(r.status);d=await r.json()}catch(e){return}
+  const mine=email===window.BG_ME.email,g=d.games,done=g.filter(x=>x.outcome),rated=g.filter(x=>x.gnu&&x.pr!=null&&x.moves>0);
+  const rt=rated.length>=3?ratingTrack(rated.map(x=>x.pr)):null;
+  $('pgCard').hidden=false;$('pgTitle').textContent=mine?'Your games':d.name+'\'s games';
+  $('pgTiles').innerHTML=`<div class="tile"><span class="k">Rating</span><span class="v">${rt?rt.r.toFixed(1):'–'}</span><span class="s">${rt?DIVS[rt.div].n:'needs 3 games'}</span></div>
+    <div class="tile"><span class="k">Games</span><span class="v">${g.length}</span><span class="s">${done.filter(x=>x.outcome==='W').length}–${done.filter(x=>x.outcome==='L').length} W–L</span></div>
+    <div class="tile"><span class="k">Blunders per game</span><span class="v">${rated.length?(rated.reduce((a,x)=>a+x.blunders,0)/rated.length).toFixed(1):'–'}</span><span class="s">graded games</span></div>`;
+  $('pgTable').innerHTML=`<thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>PR</th><th>Blun.</th></tr></thead><tbody>${g.slice().reverse().map(x=>`<tr class="click" data-g="${escH(x.id)}"><td>${dayFmt(x.date)}</td><td>${escH(oppTxt(x))}</td><td>${resTxt(x)}</td><td>${x.pr==null?'–':x.pr.toFixed(1)}</td><td>${x.blunders}</td></tr>`).join('')||'<tr><td colspan="5">No games yet.</td></tr>'}</tbody>`;
+  $('pgTable').querySelectorAll('tr.click').forEach(tr=>tr.onclick=()=>viewGame(email,tr.dataset.g));
+  $('pgCard').scrollIntoView({behavior:'smooth',block:'start'});
+}
+$('pgClose').onclick=()=>{$('pgCard').hidden=true};
+let VIEW=null;
+async function viewGame(email,id){
+  let d;try{const r=await fetch('/api/backgammon/games/'+encodeURIComponent(email)+'/'+encodeURIComponent(id),{credentials:'same-origin'});if(!r.ok)throw new Error(r.status);d=await r.json()}catch(e){alertNote('Could not open that game');return}
+  const doc=d.game,sm=d.summary,who=d.mine?null:d.name;
+  if(R)closeReview();hideDash();coachSaved=null;
+  VIEW={email,id,who,doc};
+  const rec=doc.record||[];let n=0;
+  const isA=r=>r.assisted!=null?r.assisted:(!!r.hinted&&!r.firstTry);
+  const items=rec.map((r,i)=>{
+    if(r.who==='opp')return `<div class="opp">Opponent ${r.dice?r.dice.join('-'):''}: ${escH(r.played||'')}</div>`;
+    n++;const pl=(r.firstTry||{}).played||r.played;
+    if(!r.steps||!r.steps.length)return `<div class="opp">${escH(who||'You')} ${r.dice.join('-')}: no move</div>`;
+    return `<button class="logbtn" data-i="${i}" data-n="${n}"><span class="n">${r.dice.join('-')}</span> ${escH(pl)}${r.grade?` · <span class="tone-${r.tone||'neutral'}">${escH(r.forced?'Forced':r.grade)}</span>${r.loss>=0.001?' (−'+r.loss.toFixed(3)+(r.best?', best '+escH(r.best):'')+')':''}`:''}${isA(r)?' · helped':''}</button>`}).join('');
+  const cnt=l=>rec.filter(r=>r.who==='me'&&!r.forced&&!r.auto&&(r.grade===l||(l==='Best'&&r.grade==='Best move'))).length;
+  $('coach').innerHTML=`<h2>${who?escH(who)+'\'s game':'Your game'}</h2>
+    <div style="font-weight:700;margin-bottom:4px">${escH(who?String(doc.result||'Not finished').replace(/^You win/,who+' wins').replace(/^You /,who+' '):(doc.result||'Not finished'))}</div>
+    <div class="note" style="margin:0 0 8px">${dayFmt(doc.startedAt)} · opponent ${escH(oppTxt(sm))} · PR ${sm.pr==null?'–':sm.pr.toFixed(1)} over ${sm.moves} graded moves</div>
+    <div class="tiles" style="grid-template-columns:repeat(5,minmax(0,1fr))">${[['Best','best'],['Good','good'],['Inaccuracy','warn'],['Mistake','bad'],['Blunder','bad']].map(([l,t])=>`<div class="tile" style="padding:10px 6px;align-items:center"><span class="k">${l==='Inaccuracy'?'Inacc.':l}</span><span class="v tone-${t}">${cnt(l)}</span></div>`).join('')}</div>
+    <div style="font-weight:700;margin:12px 0 0">Every move</div><div class="note" style="margin:2px 0 0">Tap ${who?escH(who)+'\'s':'your'} move to see it on the board next to the best move.</div>
+    <div class="mv-list">${items}</div>
+    <button class="btn small" id="viewClose" style="margin-top:10px">Back to my game</button>`;
+  $('rvBack').textContent='Back to the game';
+  document.querySelector('.coach-wrap, #coach').scrollIntoView({behavior:'smooth',block:'start'});
+}
+// Delegated, so the buttons still work after the review view puts the viewer's HTML back.
+$('coach').addEventListener('click',e=>{if(!VIEW)return;const b=e.target.closest('button[data-i]');
+  if(b){const t=(VIEW.doc.record||[])[+b.dataset.i];if(t)openReviewFor(t,+b.dataset.n,{who:VIEW.who||null});return}
+  if(e.target.closest('#viewClose'))closeViewer()});
+function closeViewer(){VIEW=null;if(R)closeReview();$('coach').innerHTML=S.phase==='over'?'':'<h2>Coach</h2><p class="note">Back to your game.</p>';if(S.phase==='over')showSummary();render()}
+function alertNote(t){try{syncNote(t)}catch(e){}}
 function hideDash(){$('dashView').hidden=true;$('gameView').hidden=false;$('statsBtn').textContent='Stats'}
 $('statsBtn').onclick=()=>{if($('dashView').hidden)showDash();else hideDash()};
-const APP_VERSION='v1.34';
+const APP_VERSION='v1.35';
 $('ver').textContent=APP_VERSION;
 function start(data){
   matchLabel(); setTimeout(matchLabel,4000);
+  if(CMS){$('syncSetup').hidden=true;$('syncForm').hidden=true;$('ver').textContent=APP_VERSION+' · CMS'}
   $('syncBox').hidden=false; syncNote(null,true); setTimeout(()=>syncGames(true),1500);
   if(ghToken())setTimeout(()=>loadSummaries().catch(()=>{}),3000);
   getDb().then(db=>{ if(!db){ $('exportBox').hidden=false; updateCopyNote(); } });
-  let saved=null; try{saved=JSON.parse(localStorage.getItem('bgc-current')||'null')}catch(e){}
+  let saved=null; try{saved=JSON.parse(LS.getItem('bgc-current')||'null')}catch(e){}
   const src=(data&&data.S&&data.S.pos)?data.S:(saved&&saved.pos?saved:null);
   if(src){S=src;if(S.phase==='ai'){S.phase='roll'}
     if(!S.record){S.record=[];S.recovered=true}
